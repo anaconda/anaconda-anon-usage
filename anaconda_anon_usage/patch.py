@@ -1,9 +1,10 @@
 import base64
+import functools
 import os
 import sys
 from os.path import dirname, exists, expanduser, join
 
-from conda.auxlib.decorators import memoize, memoizedproperty
+from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 from conda.cli import install as cli_install
 
@@ -66,7 +67,7 @@ def get_environment_token():
     return get_saved_token(fpath, "environment", 8)
 
 
-@memoize
+@functools.lru_cache(maxsize=None)
 def client_token_string():
     parts = ["aau/" + __version__]
     value = get_client_token()
