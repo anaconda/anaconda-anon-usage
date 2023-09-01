@@ -36,6 +36,8 @@ jobs:
         conda install conda-build
         conda build conda.recipe
         mv $CONDA/conda-bld .
+        # This ensures the noarch repodata.json is not clobbered
+        if [ -d conda-bld/win-64 ]; then rm -rf conda-bld/noarch; fi
     - name: Upload build artifacts
       uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3
       with:
