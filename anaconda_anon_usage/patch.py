@@ -50,7 +50,7 @@ def get_saved_token(fpath, what):
 
 def get_client_token():
     fpath = join(expanduser("~/.conda"), "anon_token")
-    return get_saved_token(fpath, "client", 8)
+    return get_saved_token(fpath, "client")
 
 
 def get_environment_token():
@@ -62,7 +62,7 @@ def get_environment_token():
         _debug("error retrieving prefix: %s", exc)
         return None
     fpath = join(prefix, "etc", "anon_token")
-    return get_saved_token(fpath, "environment", 8)
+    return get_saved_token(fpath, "environment")
 
 
 @memoize
