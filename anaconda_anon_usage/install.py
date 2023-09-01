@@ -1,3 +1,12 @@
+# This script, combined with the post-link, pre-unlink,
+# and activate scripts, enables us to insert support for
+# anaconda_anon_usage telemetry into conda versions that
+# do not support the pre-command plugin model; i.e.,
+# versions older than 23.7.0. It accomplishes this by
+# adding a patch to conda.base.context to execute the
+# same code that the pre-command hook would run.
+
+
 import argparse
 import os
 import sys
