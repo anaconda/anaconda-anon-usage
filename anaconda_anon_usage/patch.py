@@ -98,25 +98,26 @@ def _new_check_prefix(prefix, json=False):
     cli_install._old_check_prefix(prefix, json)
 
 
-# conda.base.context.Context.user_agent
-# Adds the ident token to the user agent string
-if not hasattr(Context, "_old_user_agent"):
-    Context._old_user_agent = Context.user_agent
-    # Using a different name ensures that this is stored
-    # in sthe cache in a different place than the original
-    Context.user_agent = memoizedproperty(_new_user_agent)
+def main():
+    # conda.base.context.Context.user_agent
+    # Adds the ident token to the user agent string
+    if not hasattr(Context, "_old_user_agent"):
+        Context._old_user_agent = Context.user_agent
+        # Using a different name ensures that this is stored
+        # in sthe cache in a different place than the original
+        Context.user_agent = memoizedproperty(_new_user_agent)
 
-# conda.cli.install.check_prefix
-# Collects the prefix computed there so that we can properly
-# detect the creation of environments using "conda env create"
-if not hasattr(cli_install, "_old_check_prefix"):
-    cli_install._old_check_prefix = cli_install.check_prefix
-    cli_install.check_prefix = _new_check_prefix
-    context.checked_prefix = None
+    # conda.cli.install.check_prefix
+    # Collects the prefix computed there so that we can properly
+    # detect the creation of environments using "conda env create"
+    if not hasattr(cli_install, "_old_check_prefix"):
+        cli_install._old_check_prefix = cli_install.check_prefix
+        cli_install.check_prefix = _new_check_prefix
+        context.checked_prefix = None
 
-# conda.base.context.Context
-# Adds anaconda_ident as a managed string config parameter
-if not hasattr(Context, "anaconda_anon_usage"):
-    _param = ParameterLoader(PrimitiveParameter(True))
-    Context.anaconda_anon_usage = _param
-    Context.parameter_names += (_param._set_name("anaconda_anon_usage"),)
+    # conda.base.context.Context
+    # Adds anaconda_anon_usage as a managed string config parameter
+    if not hasattr(Context, "anaconda_anon_usage"):
+        _param = ParameterLoader(PrimitiveParameter(True))
+        Context.anaconda_anon_usage = _param
+        Context.parameter_names += (_param._set_name("anaconda_anon_usage"),)

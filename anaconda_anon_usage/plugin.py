@@ -4,6 +4,7 @@ from conda import plugins
 def pre_command_patcher(command):
     try:
         from . import patch  # noqa
+        patch.main()
     except Exception as exc:
         print("Error loading anaconda-anon-usage:", exc)
 

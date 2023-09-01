@@ -81,7 +81,8 @@ PATCH_TEXT = b"""
 # https://github.com/Anaconda-Platform/anaconda-anon-usage
 
 try:
-    import anaconda_anon_usage.patch
+    from anaconda_anon_usage import patch
+    patch.main()
 except Exception as exc:
     import os, sys
     print("Error loading anaconda_anon_usage:", exc, file=sys.stderr)
