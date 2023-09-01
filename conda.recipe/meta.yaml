@@ -9,8 +9,9 @@ source:
 
 build:
   noarch: python
-  script:
-    - {{ PYTHON }} -m pip install --no-deps --ignore-installed -vv .
+  script_env:
+   - NEED_SCRIPTS=no   # [variant=="plugin"]
+   - NEED_SCRIPTS=yes  # [variant=="patch"]
 
 requirements:
   host:
@@ -20,7 +21,8 @@ requirements:
     - pip
   run:
     - python>=3.6
-    - conda>=23.7
+    - conda>=23.7  # [variant=="plugin"]
+    - conda<23.7   # [variant=="patch"]
 
 test:
   source_files:
@@ -29,6 +31,7 @@ test:
     - export ANACONDA_ANON_USAGE_DEBUG=1  # [unix]
     - set ANACONDA_ANON_USAGE_DEBUG=1  # [win]
     - conda info
+    - python -m anaconda_anon_usage.install --status  # [variant=="patch"]
     - python tests/test_config.py
 
 about:
