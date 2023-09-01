@@ -2,7 +2,8 @@
 
 set -e
 
-vflag="==$1"; shift
+version=$1; shift
+vflag="==$version"
 
 SCRIPTDIR=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
 CONDA_PREFIX=$(cd $CONDA_PREFIX && pwd)

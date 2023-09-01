@@ -33,9 +33,8 @@ echo "$pkgs" | grep -vE '^ *$'
 echo "------------------------"
 
 echo
-export CONDA_ANACONDA_ANON_USAGE=yes
 cmd="$T_PYTHON -m conda info"
-echo "\$ CONDA_ANACONDA_ANON_USAGE=yes $cmd"
+echo "\$ $cmd"
 echo "------------------------"
 cinfo=$($cmd 2>&1)
 echo "$cinfo" | grep -vE '^ *$'

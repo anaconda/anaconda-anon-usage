@@ -96,6 +96,7 @@ jobs:
         conda config --set solver libmamba
         python tests/test_config.py
         conda config --set solver classic
+        rm -f ~/.condarc || :
     - name: Build an installer
       run: |
         cd tests
@@ -107,11 +108,15 @@ jobs:
       run: |
         cd tests
         start /wait AIDTest-1.0-Windows-x86_64.exe /S /D=%USERPROFILE%\aidtest
+        call %USERPROFILE%\aidtest\Scripts\activate
+        conda info
     - name: Run the installer (Unix)
       if: matrix.os != 'windows-latest'
       run: |
         cd tests
         bash AIDTest*.sh -b -p ~/aidtest -k
+        source ~/aidtest/bin/activate
+        conda info
     - name: Test the installed environment
       run: |
         cd tests
