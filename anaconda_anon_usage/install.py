@@ -72,6 +72,14 @@ def tryop(op, *args, **kwargs):
 
 PATCH_TEXT = b"""
 # anaconda_anon_usage p2
+# This file hooks anaconda-anon-usage into the conda context
+# system. It augments the request header data that conda
+# delivers to package servers during index and package
+# requests without revealing personally identifying information.
+#
+# More information about anaconda-anon-usage can be found on:
+# https://github.com/Anaconda-Platform/anaconda-anon-usage
+
 try:
     import anaconda_anon_usage.patch
 except Exception as exc:
