@@ -1,0 +1,38 @@
+{% set data = load_setup_py_data() %}
+
+package:
+  name: anaconda-anon-usage
+  version: {{ data['version'] }}
+
+source:
+  path: ..
+
+build:
+  noarch: python
+  script:
+    - {{ PYTHON }} -m pip install --no-deps --ignore-installed -vv .
+
+requirements:
+  host:
+    - python
+    - setuptools
+    - wheel
+    - pip
+  run:
+    - python>=3.6
+    - conda>=23.7
+
+test:
+  source_files:
+    - tests
+  commands:
+    - export ANACONDA_ANON_USAGE_DEBUG=1  # [unix]
+    - set ANACONDA_ANON_USAGE_DEBUG=1  # [win]
+    - conda info
+    - python tests/test_config.py
+
+about:
+  home: https://github.com/Anaconda-Platform/anaconda-anon-usage
+  summary: basic anonymous telemetry for conda clients
+  license: {{ data.get('license') }}
+  license_file: LICENSE

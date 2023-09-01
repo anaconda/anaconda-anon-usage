@@ -1,0 +1,131 @@
+name: Build
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  # Concurrency group that uses the workflow name and PR number if available
+  # or commit SHA as a fallback. If a new build is triggered under that
+  # concurrency group while a previous build is running it will be canceled.
+  # Repeated pushes to a PR will cancel all previous builds, while multiple
+  # merges to main will not cancel.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Retrieve the source code
+      uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3
+      with:
+        fetch-depth: 0
+    - name: Build the package
+      run: |
+        source $CONDA/etc/profile.d/conda.sh
+        conda install conda-build
+        conda build conda.recipe
+        mv $CONDA/conda-bld .
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3
+      with:
+        if-no-files-found: error
+        name: conda-bld
+        path: conda-bld/
+  test:
+    needs: build
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        cversion: [23.7.3]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Retrieve the source code
+      uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3
+      with:
+        fetch-depth: 0
+    - name: Download build artfiacts
+      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      with:
+        name: conda-bld
+        path: ./conda-bld
+    - name: Build test environments
+      run: |
+        mv conda-bld $CONDA/
+        source $CONDA/etc/profile.d/conda.sh
+        pkg=local::anaconda-anon-usage
+        conda install anaconda-client constructor conda-index $pkg
+        conda create -p ./testenv $pkg conda==${{ matrix.cversion }} conda-libmamba-solver
+        if [ -f ./testenv/Scripts/conda.exe ]; then \
+           sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
+        fi
+    - name: Test environments (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: cmd
+      run: |
+        call testenv\Scripts\activate
+        set ANACONDA_ANON_USAGE_DEBUG=1
+        conda info
+        python tests\test_config.py
+        conda config --set solver libmamba
+        python tests\test_config.py
+        conda config --set solver classic
+    - name: Test environments (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        source ./testenv/bin/activate
+        export ANACONDA_ANON_USAGE_DEBUG=1
+        conda info
+        python tests/test_config.py
+        conda config --set solver libmamba
+        python tests/test_config.py
+        conda config --set solver classic
+    - name: Build an installer
+      run: |
+        cd tests
+        export CONDA_PREFIX=$CONDA
+        bash test_installer.sh ${{ matrix.cversion }}
+    - name: Run the installer (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: cmd
+      run: |
+        cd tests
+        start /wait AIDTest-1.0-Windows-x86_64.exe /S /D=%USERPROFILE%\aidtest
+    - name: Run the installer (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd tests
+        bash AIDTest*.sh -b -p ~/aidtest -k
+    - name: Test the installed environment
+      run: |
+        cd tests
+        bash test_environment.sh ~/aidtest
+  upload:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download package
+      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      with:
+        name: conda-bld
+        path: ./conda-bld
+    - name: Upload to anaconda.org
+      if: github.event_name == 'push'
+      env:
+        ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+        GITHUB_REF: ${{ github.ref }}
+      run: |
+        source $CONDA/bin/activate
+        conda install anaconda-client
+        [[ "$GITHUB_REF" =~ ^refs/tags/ ]] || export LABEL="--label dev"
+        anaconda --verbose --token $ANACONDA_TOKEN upload --user mcg $LABEL conda-bld/*/*.tar.bz2 --force
