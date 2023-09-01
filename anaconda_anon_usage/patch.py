@@ -6,7 +6,6 @@ from os.path import dirname, exists, expanduser, join
 
 from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
-from conda.cli import install as cli_install
 
 from . import __version__
 
@@ -93,11 +92,6 @@ def _new_user_agent(ctx):
     return result
 
 
-def _new_check_prefix(prefix, json=False):
-    context.checked_prefix = prefix
-    cli_install._old_check_prefix(prefix, json)
-
-
 def main():
     # conda.base.context.Context.user_agent
     # Adds the ident token to the user agent string
@@ -106,6 +100,12 @@ def main():
         # Using a different name ensures that this is stored
         # in sthe cache in a different place than the original
         Context.user_agent = memoizedproperty(_new_user_agent)
+
+    from conda.cli import install as cli_install
+
+    def _new_check_prefix(prefix, json=False):
+        context.checked_prefix = prefix
+        cli_install._old_check_prefix(prefix, json)
 
     # conda.cli.install.check_prefix
     # Collects the prefix computed there so that we can properly
