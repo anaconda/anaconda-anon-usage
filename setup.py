@@ -10,7 +10,7 @@ setup(
     license="BSD",
     author="Michael C. Grant",
     author_email="mgrant@anaconda.com",
-    url="https://github.com/Anaconda-Platform/anaconda-ident",
+    url="https://github.com/Anaconda-Platform/anaconda-anon-usage",
     packages=["anaconda_anon_usage"],
     install_requires=["conda"],
     keywords=["anaconda-anon-usage"],

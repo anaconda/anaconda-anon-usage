@@ -52,8 +52,8 @@ def get_config() -> VersioneerConfig:
     cfg.VCS = "git"
     cfg.style = ""
     cfg.tag_prefix = ""
-    cfg.parentdir_prefix = "anaconda-ident-"
-    cfg.versionfile_source = "anaconda_ident/_version.py"
+    cfg.parentdir_prefix = "anaconda-anon-usage-"
+    cfg.versionfile_source = "anaconda_anon_usage/_version.py"
     cfg.verbose = False
     return cfg
 
