@@ -5,7 +5,6 @@ import sysconfig
 from os.path import basename, dirname, exists, join, relpath
 from traceback import format_exc
 
-
 THIS_DIR = dirname(__file__)
 
 
@@ -14,13 +13,12 @@ def configure_parser():
     p = argparse.ArgumentParser(description="The anaconda-anon-usage installer.")
     g = p.add_mutually_exclusive_group()
     g.add_argument(
-        "--enable",
-        action="store_true",
-        help="Install the anaconda_anon_usage patch."
+        "--enable", action="store_true", help="Install the anaconda_anon_usage patch."
     )
     g.add_argument(
-        "--disable", action="store_true",
-        help="Remove the the anaconda_anon_usage patch."
+        "--disable",
+        action="store_true",
+        help="Remove the the anaconda_anon_usage patch.",
     )
     g.add_argument(
         "--status",
