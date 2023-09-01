@@ -31,7 +31,7 @@ yourself, as it will come as a dependency of other Anaconda
 packages such as `anaconda-navigator`. Nevertheless, it can
 readily be installed as follows:
 ```
-conda install -n base anaconda-ident
+conda install -n base anaconda-anon-usage
 ```
 This package has no additional dependencies other than `conda`
 itself. It employs a [conda pre-command plugin](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/conda-plugins.html) to
