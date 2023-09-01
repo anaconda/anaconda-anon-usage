@@ -2,6 +2,7 @@ import base64
 import os
 import sys
 from os.path import dirname, exists, expanduser, join
+from uuid import uuid4
 
 from conda.auxlib.decorators import memoize, memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
@@ -17,13 +18,11 @@ def _debug(s, *args, error=False):
         print(s % args, file=sys.stderr)
 
 
-def get_random_token(nchar, bytes=None):
-    if bytes is None:
-        bytes = os.urandom((nchar * 6 - 1) // 8 + 1)
-    return base64.urlsafe_b64encode(bytes)[:nchar].decode("ascii")
+def get_random_token():
+    return base64.urlsafe_b64encode(uuid4().bytes).strip(b"=").decode("ascii")
 
 
-def get_saved_token(fpath, what, length=8):
+def get_saved_token(fpath, what):
     client_token = ""
     _debug("%s token path: %s", what.capitalize(), fpath)
     if exists(fpath):
@@ -33,10 +32,10 @@ def get_saved_token(fpath, what, length=8):
             _debug("Retrieved %s token: %s", what, client_token)
         except Exception as exc:
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
-    if len(client_token) < length:
+    if len(client_token) < 22:
         if len(client_token) > 0:
             _debug("Generating longer token")
-        client_token = get_random_token(length)
+        client_token = get_random_token()
         try:
             os.makedirs(dirname(fpath), exist_ok=True)
             with open(fpath, "w") as fp:
@@ -46,12 +45,12 @@ def get_saved_token(fpath, what, length=8):
         except Exception as exc:
             _debug("Unexpected error writing: %s\n  %s", fpath, exc, error=True)
             client_token = ""
-    return client_token[:length]
+    return client_token
 
 
 def get_client_token():
     fpath = join(expanduser("~/.conda"), "anon_token")
-    return get_saved_token(fpath, "client", 8)
+    return get_saved_token(fpath, "client")
 
 
 def get_environment_token():
@@ -63,7 +62,7 @@ def get_environment_token():
         _debug("error retrieving prefix: %s", exc)
         return None
     fpath = join(prefix, "etc", "anon_token")
-    return get_saved_token(fpath, "environment", 8)
+    return get_saved_token(fpath, "environment")
 
 
 @memoize
@@ -72,7 +71,7 @@ def client_token_string():
     value = get_client_token()
     if value:
         parts.append("c/" + value)
-    parts.append("s/" + get_random_token(8))
+    parts.append("s/" + get_random_token())
     value = get_environment_token()
     if value:
         parts.append("e/" + value)
