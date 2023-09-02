@@ -81,7 +81,9 @@ jobs:
       run: |
         call testenv\Scripts\activate
         set ANACONDA_ANON_USAGE_DEBUG=1
-        conda info
+        conda info 1>output.txt 2>&1 | type output.txt
+        find "Error loading" output.txt >nul
+        if %errorlevel% equ 0 exit -1
         python tests\test_config.py
         conda config --set solver libmamba
         python tests\test_config.py
@@ -91,7 +93,8 @@ jobs:
       run: |
         source ./testenv/bin/activate
         export ANACONDA_ANON_USAGE_DEBUG=1
-        conda info
+        conda info 2>&1 | tee output.txt
+        if grep -q 'Error loading' output.txt; then exit -1; fi
         python tests/test_config.py
         conda config --set solver libmamba
         python tests/test_config.py
