@@ -80,19 +80,14 @@ PATCH_TEXT = b"""
 # More information about anaconda-anon-usage can be found on:
 # https://github.com/Anaconda-Platform/anaconda-anon-usage
 
-_old__init__ = context.__init__
-def _new_init(*args, **kwargs):
-    try:
-        import anaconda_anon_usage.patch
-        patch.main()
-    except Exception as exc:
-        import os, sys
-        print("Error loading anaconda_anon_usage:", exc, file=sys.stderr)
-        if os.environ.get('ANACONDA_ANON_USAGE_RAISE'):
-            raise
-    context.__init__ = _old__init__
-    _old__init__(*args, **kwargs)
-context.__init__ = _new_init
+try:
+    from anaconda_anon_usage import patch
+    patch.main()
+except Exception as exc:
+    import os, sys
+    print("Error loading anaconda_anon_usage:", exc, file=sys.stderr)
+    if os.environ.get('ANACONDA_ANON_USAGE_RAISE'):
+        raise
 # anaconda_ident p3
 """
 
