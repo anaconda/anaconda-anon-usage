@@ -20,18 +20,24 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
     - name: Retrieve the source code
       uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3
       with:
         fetch-depth: 0
     - name: Build the package
+      shell: bash
       run: |
         source $CONDA/etc/profile.d/conda.sh
         conda install conda-build
         conda build conda.recipe
         mv $CONDA/conda-bld .
+        # This ensures the noarch repodata.json is not clobbered
+        if [ -d conda-bld/win-64 ]; then rm -rf conda-bld/noarch; fi
     - name: Upload build artifacts
       uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3
       with:
@@ -90,6 +96,7 @@ jobs:
         conda config --set solver libmamba
         python tests/test_config.py
         conda config --set solver classic
+        rm -f ~/.condarc || :
     - name: Build an installer
       run: |
         cd tests
@@ -101,11 +108,15 @@ jobs:
       run: |
         cd tests
         start /wait AIDTest-1.0-Windows-x86_64.exe /S /D=%USERPROFILE%\aidtest
+        call %USERPROFILE%\aidtest\Scripts\activate
+        conda info
     - name: Run the installer (Unix)
       if: matrix.os != 'windows-latest'
       run: |
         cd tests
         bash AIDTest*.sh -b -p ~/aidtest -k
+        source ~/aidtest/bin/activate
+        conda info
     - name: Test the installed environment
       run: |
         cd tests
