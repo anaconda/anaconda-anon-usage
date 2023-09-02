@@ -8,7 +8,7 @@ source:
   path: ..
 
 build:
-  noarch: python
+  noarch: python  # [not win]
   script_env:
    - NEED_SCRIPTS=no   # [variant=="plugin"]
    - NEED_SCRIPTS=yes  # [variant=="patch"]

@@ -71,7 +71,7 @@ def tryop(op, *args, **kwargs):
 
 
 PATCH_TEXT = b"""
-# anaconda_anon_usage p2
+# anaconda_anon_usage p3
 # This file hooks anaconda-anon-usage into the conda context
 # system. It augments the request header data that conda
 # delivers to package servers during index and package
@@ -80,15 +80,20 @@ PATCH_TEXT = b"""
 # More information about anaconda-anon-usage can be found on:
 # https://github.com/Anaconda-Platform/anaconda-anon-usage
 
-try:
-    from anaconda_anon_usage import patch
-    patch.main()
-except Exception as exc:
-    import os, sys
-    print("Error loading anaconda_anon_usage:", exc, file=sys.stderr)
-    if os.environ.get('ANACONDA_ANON_USAGE_RAISE'):
-        raise
-# anaconda_ident p1
+_old__init__ = context.__init__
+def _new_init(*args, **kwargs):
+    try:
+        import anaconda_anon_usage.patch
+        patch.main()
+    except Exception as exc:
+        import os, sys
+        print("Error loading anaconda_anon_usage:", exc, file=sys.stderr)
+        if os.environ.get('ANACONDA_ANON_USAGE_RAISE'):
+            raise
+    context.__init__ = _old__init__
+    _old__init__(*args, **kwargs)
+context.__init__ = _new_init
+# anaconda_ident p3
 """
 
 __sp_dir = None
