@@ -202,7 +202,7 @@ def manage_patch(args):
         print("conda prefix:", sys.prefix)
     global PATCH_TEXT
     pfile = join(_sp_dir(), "conda", "base", "context.py")
-    _patch(args, pfile, PATCH_TEXT, 70000, False)
+    _patch(args, pfile, PATCH_TEXT, 60000, False)
 
 
 def main(args=None):
