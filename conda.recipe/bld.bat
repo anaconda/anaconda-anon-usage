@@ -2,6 +2,7 @@ echo on
 setlocal EnableDelayedExpansion
 %PREFIX%\python.exe -m pip install --no-deps --ignore-installed -vv .
 if "%NEED_SCRIPTS%" neq "yes" del %SP_DIR%\anaconda_anon_usage\install.py
+if "%NEED_SCRIPTS%" equ "yes" del %SP_DIR%\anaconda_anon_usage\plugin.py
 if "%NEED_SCRIPTS%" neq "yes" exit
 if not exist %PREFIX%\etc\conda\activate.d mkdir %PREFIX%\etc\conda\activate.d
 if not exist %PREFIX%\python-scripts mkdir %PREFIX%\python-scripts

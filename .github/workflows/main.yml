@@ -46,6 +46,9 @@ jobs:
         path: conda-bld/
   test:
     needs: build
+    env:
+      ANACONDA_ANON_USAGE_DEBUG: 1
+      ANACONDA_ANON_USAGE_RAISE: 1
     defaults:
       run:
         shell: bash
@@ -84,8 +87,6 @@ jobs:
       shell: cmd
       run: |
         call testenv\Scripts\activate
-        set ANACONDA_ANON_USAGE_DEBUG=1
-        set ANACONDA_ANON_USAGE_RAISE=1
         conda info 1>output.txt 2>&1 | type output.txt
         find "Error loading" output.txt >nul
         if %errorlevel% equ 0 exit -1
@@ -99,8 +100,6 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: |
         source ./testenv/bin/activate
-        export ANACONDA_ANON_USAGE_DEBUG=1
-        export ANACONDA_ANON_USAGE_RAISE=1
         conda info 2>&1 | tee output.txt
         if grep -q 'Error loading' output.txt; then exit -1; fi
         python tests/test_config.py
