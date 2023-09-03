@@ -1,3 +1,5 @@
+import os
+
 from setuptools import setup
 
 import versioneer
@@ -18,7 +20,9 @@ setup(
         "conda": [
             "anaconda-anon-usage-plugin = anaconda_anon_usage.plugin",
         ],
-    },
+    }
+    if os.environ.get("NEED_SCRIPTS") != "yes"
+    else {},
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",

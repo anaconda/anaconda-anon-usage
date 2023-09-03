@@ -2,6 +2,8 @@
 if [ "$NEED_SCRIPTS" != yes ]; then
     rm ${SP_DIR}/anaconda_anon_usage/install.py
     exit 0
+else
+    rm ${SP_DIR}/anaconda_anon_usage/plugin.py
 fi
 mkdir -p "${PREFIX}/etc/conda/activate.d"
 mkdir -p "${PREFIX}/python-scripts"

@@ -22,12 +22,17 @@ def configure_parser():
     p = argparse.ArgumentParser(description="The anaconda-anon-usage installer.")
     g = p.add_mutually_exclusive_group()
     g.add_argument(
-        "--enable", action="store_true", help="Install the anaconda_anon_usage patch."
+        "--enable",
+        action="store_true",
+        help="Install the anaconda_anon_usage patch. This is used by the "
+        "pre-install and activate scripts to ensure the package is active.",
     )
     g.add_argument(
         "--disable",
         action="store_true",
-        help="Remove the the anaconda_anon_usage patch.",
+        help="Remove the the anaconda_anon_usage patch. This is used by the "
+        "pre-unlink script. It is not useful in normal operation; to disable "
+        "the telemetry, use conda config --set anaconda_anon_usage false.",
     )
     g.add_argument(
         "--status",
@@ -36,15 +41,15 @@ def configure_parser():
     )
     p.add_argument(
         "--quiet",
-        dest="verbose",
-        action="store_false",
-        default=True,
+        dest="quiet",
+        action="store_true",
         help="Silent mode; disables all non-error output.",
     )
     return p
 
 
 success = True
+verbose = True
 
 
 def error(what, fatal=False, warn=False):
@@ -109,18 +114,18 @@ def _eolmatch(text, ptext):
     return ptext
 
 
-def _read(args, pfile, patch_text, expect_no=False):
+def _read(pfile, patch_text):
     if not exists(pfile):
         return None, "NOT PRESENT"
     with open(pfile, "rb") as fp:
         text = fp.read()
     patch_text = _eolmatch(text, patch_text)
     if text.endswith(patch_text):
-        status = "NEEDS REMOVAL" if expect_no else "ENABLED"
+        status = "ENABLED"
     elif b"anaconda_ident" in text:
-        status = "NEEDS REMOVAL" if expect_no else "NEEDS UPDATE"
+        status = "NEEDS UPDATE"
     else:
-        status = "DISABLED (not pro)" if expect_no else "DISABLED"
+        status = "DISABLED"
     return text, status
 
 
@@ -135,11 +140,10 @@ def _strip(text, patch_text):
     return text
 
 
-def _patch(args, pfile, patch_text, safety_len, expect_no):
-    verbose = args.verbose or args.status
+def _patch(args, pfile, patch_text, safety_len):
     if verbose:
         print(f"patch target: ...{relpath(pfile, _sp_dir())}")
-    text, status = _read(args, pfile, patch_text, expect_no)
+    text, status = _read(pfile, patch_text)
     if verbose:
         print(f"| status: {status}")
     if status == "NOT PRESENT":
@@ -150,7 +154,7 @@ def _patch(args, pfile, patch_text, safety_len, expect_no):
     elif status == "NEEDS REMOVAL":
         need_change = True
         status = "removing"
-    elif args.enable and not expect_no:
+    elif args.enable:
         need_change = status == "DISABLED"
         status = "applying"
     elif args.disable:
@@ -192,21 +196,22 @@ def _patch(args, pfile, patch_text, safety_len, expect_no):
         print(f"{what}: {exc}")
         if renamed:
             os.rename(pfile_orig, pfile)
-    text, status = _read(args, pfile, patch_text)
+    text, status = _read(pfile, patch_text)
     if verbose:
         print(f"| new status: {status}")
 
 
 def manage_patch(args):
-    if args.verbose or args.status:
+    if verbose:
         print("conda prefix:", sys.prefix)
     global PATCH_TEXT
     pfile = join(_sp_dir(), "conda", "base", "context.py")
-    _patch(args, pfile, PATCH_TEXT, 60000, False)
+    _patch(args, pfile, PATCH_TEXT, 60000)
 
 
 def main(args=None):
     global success
+    global verbose
 
     p = configure_parser()
 
@@ -214,8 +219,9 @@ def main(args=None):
         sys.argv[0] = "anaconda-anon-usage"
 
     args = p.parse_args(args)
+    if args.quiet and not args.status:
+        verbose = False
 
-    verbose = args.verbose or args.status or len(sys.argv) <= 1
     if verbose:
         pkg_name = basename(dirname(__file__))
         msg = pkg_name + " installer"
