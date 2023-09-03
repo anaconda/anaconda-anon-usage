@@ -38,7 +38,7 @@ all_sessions = set()
 for ctype in ("env", "cfg"):
     if ctype == "cfg" and ENVKEY in os.environ:
         del os.environ[ENVKEY]
-    for mode in ("true", "false", "yes", "no", "on", "off", "default", ""):
+    for mode in ("true", "false", "yes", "no", "on", "off", "default"):
         if mode == "default" and ctype == "env":
             continue
         enabled = mode in ("default", "true", "yes", "on")
