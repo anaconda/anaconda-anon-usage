@@ -22,7 +22,7 @@ requirements:
   run:
     - python>=3.6
     - conda>=23.7  # [variant=="plugin"]
-    - conda>=22.11,<23.7   # [variant=="patch"]
+    - conda>=4.11,<23.7   # [variant=="patch"]
 
 test:
   source_files:

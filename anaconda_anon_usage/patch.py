@@ -1,12 +1,12 @@
 import base64
+import functools
 import os
 import sys
 from os.path import dirname, exists, expanduser, join
 from uuid import uuid4
 
-from conda.auxlib.decorators import memoize, memoizedproperty
+from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
-from conda.cli import install as cli_install
 
 from . import __version__
 
@@ -55,7 +55,7 @@ def get_client_token():
 
 def get_environment_token():
     try:
-        prefix = context.checked_prefix or context.target_prefix
+        prefix = Context.checked_prefix or context.target_prefix
         if prefix is None:
             return None
     except Exception as exc:
@@ -65,7 +65,7 @@ def get_environment_token():
     return get_saved_token(fpath, "environment")
 
 
-@memoize
+@functools.lru_cache(maxsize=None)
 def client_token_string():
     parts = ["aau/" + __version__]
     value = get_client_token()
@@ -91,30 +91,53 @@ def _new_user_agent(ctx):
     return result
 
 
-def _new_check_prefix(prefix, json=False):
-    context.checked_prefix = prefix
-    cli_install._old_check_prefix(prefix, json)
+def main(plugin=False):
+    if hasattr(Context, "_old_user_agent"):
+        _debug("anaconda_anon_usage already active")
+        return
+    _debug("Applying anaconda_anon_usage context patch")
 
-
-# conda.base.context.Context.user_agent
-# Adds the ident token to the user agent string
-if not hasattr(Context, "_old_user_agent"):
+    # conda.base.context.Context.user_agent
+    # Adds the ident token to the user agent string
     Context._old_user_agent = Context.user_agent
     # Using a different name ensures that this is stored
-    # in sthe cache in a different place than the original
+    # in the cache in a different place than the original
     Context.user_agent = memoizedproperty(_new_user_agent)
 
-# conda.cli.install.check_prefix
-# Collects the prefix computed there so that we can properly
-# detect the creation of environments using "conda env create"
-if not hasattr(cli_install, "_old_check_prefix"):
-    cli_install._old_check_prefix = cli_install.check_prefix
-    cli_install.check_prefix = _new_check_prefix
-    context.checked_prefix = None
-
-# conda.base.context.Context
-# Adds anaconda_ident as a managed string config parameter
-if not hasattr(Context, "anaconda_anon_usage"):
+    # conda.base.context.Context
+    # Adds anaconda_anon_usage as a managed string config parameter
     _param = ParameterLoader(PrimitiveParameter(True))
     Context.anaconda_anon_usage = _param
     Context.parameter_names += (_param._set_name("anaconda_anon_usage"),)
+
+    # conda.base.context.checked_prefix
+    # Saves the prefix used in a conda install command
+    Context.checked_prefix = None
+
+    def _new_check_prefix(prefix, json=False):
+        Context.checked_prefix = prefix
+        Context._old_check_prefix(prefix, json)
+
+    def _patch_check_prefix():
+        _debug("Applying anaconda_anon_usage cli.install patch")
+        from conda.cli import install as cli_install
+
+        Context._old_check_prefix = cli_install.check_prefix
+        cli_install.check_prefix = _new_check_prefix
+
+    if plugin:
+        # The pre-command plugin avoids the circular import
+        # of conda.cli.install, so we can apply the patch now
+        _patch_check_prefix()
+    else:
+        # We need to delay further. Schedule the patch for the
+        # next time context.__init__ is called.
+        _debug("Deferring anaconda_anon_usage cli.install patch")
+        _old__init__ = context.__init__
+
+        def _new_init(*args, **kwargs):
+            _patch_check_prefix()
+            context.__init__ = _old__init__
+            _old__init__(*args, **kwargs)
+
+        context.__init__ = _new_init
