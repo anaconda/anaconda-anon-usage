@@ -58,7 +58,7 @@ def main(plugin=False):
 
     # conda.base.context.checked_prefix
     # Saves the prefix used in a conda install command
-    Context.checked_prefix = None
+    context.checked_prefix = None
 
     # conda.base.context._aau_initialized
     # This helps us determine if the patching is comlpete
