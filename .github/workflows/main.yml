@@ -73,7 +73,7 @@ jobs:
         mv conda-bld $CONDA/
         source $CONDA/etc/profile.d/conda.sh
         pkg=local::anaconda-anon-usage
-        conda install anaconda-client constructor conda-index $pkg
+        conda install --file tests/requirements.txt $pkg
         if [[ ! "${{ matrix.cversion }}" =~ 4.* ]]; then
           mamba=conda-libmamba-solver
           echo "MAMBA=yes" >> "$GITHUB_ENV"
@@ -82,6 +82,8 @@ jobs:
         if [ -f ./testenv/Scripts/conda.exe ]; then \
            sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
         fi
+    - name: Test code
+      run: pytest
     - name: Test environments (Windows)
       if: matrix.os == 'windows-latest'
       shell: cmd
