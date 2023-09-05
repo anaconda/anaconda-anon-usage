@@ -3,11 +3,10 @@ from os import remove
 from os.path import exists, expanduser, isdir, join
 
 import pytest
-from conda.base.context import context, Context
+from conda.base.context import Context, context
 from conda.cli import install as cli_install
 
 from anaconda_anon_usage import patch
-
 
 CONDA_CONFIG_DIR = expanduser("~/.conda")
 AAU_TOKEN_PATH = join(CONDA_CONFIG_DIR, "aau_token")
