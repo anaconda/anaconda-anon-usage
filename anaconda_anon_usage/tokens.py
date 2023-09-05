@@ -13,6 +13,7 @@ from . import __version__
 from .utils import _debug, _random_token, _saved_token
 
 Tokens = namedtuple("Tokens", ("version", "client", "session", "environment"))
+CONFIG_DIR = expanduser("~/.conda")
 
 
 def version_token():
@@ -30,7 +31,7 @@ def client_token():
     been generated, an attempt is made to do so. If
     that fails, an empty string is returned.
     """
-    fpath = join(expanduser("~/.conda"), "aau_token")
+    fpath = join(CONFIG_DIR, "aau_token")
     return _saved_token(fpath, "client")
 
 
