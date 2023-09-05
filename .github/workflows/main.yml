@@ -90,10 +90,10 @@ jobs:
         conda info 1>output.txt 2>&1 | type output.txt
         find "Error loading" output.txt >nul
         if %errorlevel% equ 0 exit -1
-        python tests\test_config.py
+        python tests\integration\test_config.py
         if "%MAMBA%" equ "yes" (
           conda config --set solver libmamba
-          python tests\test_config.py
+          python tests\integration\test_config.py
           conda config --set solver classic
         )
     - name: Test environments (Unix)
@@ -102,15 +102,15 @@ jobs:
         source ./testenv/bin/activate
         conda info 2>&1 | tee output.txt
         if grep -q 'Error loading' output.txt; then exit -1; fi
-        python tests/test_config.py
+        python tests/integration/test_config.py
         if [ "$MAMBA" = "yes" ]; then
           conda config --set solver libmamba
-          python tests/test_config.py
+          python tests/integration/test_config.py
           conda config --set solver classic
         fi
     - name: Build an installer
       run: |
-        cd tests
+        cd tests/integration
         export CONDA_PREFIX=$CONDA
         bash test_installer.sh ${{ matrix.cversion }}
     - name: Run the installer (Windows)
@@ -130,7 +130,7 @@ jobs:
         conda info
     - name: Test the installed environment
       run: |
-        cd tests
+        cd tests/integration
         bash test_environment.sh ~/aidtest
   upload:
     needs: test
