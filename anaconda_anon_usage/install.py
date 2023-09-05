@@ -77,8 +77,8 @@ def tryop(op, *args, **kwargs):
 
 PATCH_TEXT = b"""
 # anaconda_anon_usage p3
-# This file hooks anaconda-anon-usage into the conda context
-# system. It augments the request header data that conda
+# The following code hooks anaconda-anon-usage into the conda
+# context system. It augments the request header data that conda
 # delivers to package servers during index and package
 # requests without revealing personally identifying information.
 #
