@@ -82,8 +82,6 @@ jobs:
         if [ -f ./testenv/Scripts/conda.exe ]; then \
            sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
         fi
-    - name: Test code
-      run: pytest
     - name: Test environments (Windows)
       if: matrix.os == 'windows-latest'
       shell: cmd
@@ -110,6 +108,8 @@ jobs:
           python tests/integration/test_config.py
           conda config --set solver classic
         fi
+    - name: Test code
+      run: pytest
     - name: Build an installer
       run: |
         cd tests/integration
