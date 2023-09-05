@@ -73,12 +73,12 @@ jobs:
         mv conda-bld $CONDA/
         source $CONDA/etc/profile.d/conda.sh
         pkg=local::anaconda-anon-usage
-        conda install --file tests/requirements.txt $pkg
+        conda install anaconda-client constructor conda-index $pkg
         if [[ ! "${{ matrix.cversion }}" =~ 4.* ]]; then
           mamba=conda-libmamba-solver
           echo "MAMBA=yes" >> "$GITHUB_ENV"
         fi
-        conda create -p ./testenv $pkg conda==${{ matrix.cversion }} $mamba
+        conda create -p ./testenv $pkg conda==${{ matrix.cversion }} $mamba --file tests/requirements.txt
         if [ -f ./testenv/Scripts/conda.exe ]; then \
            sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
         fi
@@ -109,7 +109,9 @@ jobs:
           conda config --set solver classic
         fi
     - name: Test code
-      run: pytest
+      run: |
+        source ./testenv/bin/activate
+        pytest
     - name: Build an installer
       run: |
         cd tests/integration

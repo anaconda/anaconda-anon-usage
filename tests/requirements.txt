@@ -1,6 +1,3 @@
-anaconda-client
-constructor
-conda-index
 pytest
 pytest-cov
 pytest-mock
