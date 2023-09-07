@@ -1,3 +1,9 @@
+# This module provides functions for reading and writing the
+# anonymous token set. It has been designed to rely only on the
+# Python standard library. In particular, hard dependencies on
+# conda must be avoided so that this package can be used in
+# child environments.
+
 import base64
 import functools
 import os

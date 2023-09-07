@@ -1,3 +1,7 @@
+# This module implements the changes to conda's context class
+# needed to deploy the additional anonmyous user data. It pulls
+# the token management functions themselves from the api module.
+
 import sys
 
 from conda.auxlib.decorators import memoizedproperty
@@ -30,6 +34,7 @@ def _patch_check_prefix():
 
     Context._old_check_prefix = cli_install.check_prefix
     cli_install.check_prefix = _new_check_prefix
+    context._initialized = True
 
 
 def main(plugin=False):
@@ -54,6 +59,10 @@ def main(plugin=False):
     # conda.base.context.checked_prefix
     # Saves the prefix used in a conda install command
     Context.checked_prefix = None
+
+    # conda.base.context._initialized
+    # This helps us determine if the patching is comlpete
+    context._initialized = False
 
     if plugin:
         # The pre-command plugin avoids the circular import
