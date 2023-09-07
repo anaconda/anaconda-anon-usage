@@ -70,18 +70,21 @@ def all_tokens(prefix=None):
 
 
 @functools.lru_cache(maxsize=None)
-def token_string(prefix=None):
+def token_string(prefix=None, enabled=True):
     """
     Returns the token set, formatted into the string that is
     appended to the conda user agent.
     """
-    values = all_tokens(prefix)
-    parts = ["aau/" + values.version]
-    if values.client:
-        parts.append("c/" + values.client)
-    parts.append("s/" + values.session)
-    if values.environment:
-        parts.append("e/" + values.environment)
+    parts = ["aau/" + __version__]
+    if enabled:
+        values = all_tokens(prefix)
+        if values.client:
+            parts.append("c/" + values.client)
+        parts.append("s/" + values.session)
+        if values.environment:
+            parts.append("e/" + values.environment)
+    else:
+        _debug("anaconda_anon_usage disabled by config")
     result = " ".join(parts)
     _debug("Full client token: %s", result)
     return result

@@ -13,13 +13,13 @@ from .utils import _debug
 
 def _new_user_agent(ctx):
     result = ctx._old_user_agent
-    if context.anaconda_anon_usage:
-        prefix = Context.checked_prefix or context.target_prefix or sys.prefix
-        token = token_string(prefix)
+    prefix = Context.checked_prefix or context.target_prefix or sys.prefix
+    try:
+        token = token_string(prefix, context.anaconda_anon_usage)
         if token:
             result += " " + token
-    else:
-        _debug("anaconda_anon_usage disabled by config")
+    except Exception:
+        pass
     return result
 
 
