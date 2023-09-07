@@ -21,10 +21,13 @@ requirements:
     - pip
   run:
     - python>=3.6
+  run_constrained:
     - conda>=23.7  # [variant=="plugin"]
     - conda>=4.11,<23.7   # [variant=="patch"]
 
 test:
+  requires:
+    - conda
   source_files:
     - tests
   commands:
