@@ -1,3 +1,5 @@
+import sys
+
 from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
@@ -7,9 +9,11 @@ from .api import _debug, token_string
 def _new_user_agent(ctx):
     result = ctx._old_user_agent
     if context.anaconda_anon_usage:
-        token = token_string()
-        if token:
-            result += " " + token
+        prefix = Context.checked_prefix or context.target_prefix or sys.prefix
+        if prefix:
+            token = token_string(prefix)
+            if token:
+                result += " " + token
     else:
         _debug("anaconda_anon_usage disabled by config")
     return result

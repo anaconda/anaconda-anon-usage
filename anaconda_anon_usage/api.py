@@ -22,6 +22,12 @@ def _random_token():
 
 
 def _saved_token(fpath, what):
+    """
+    Implements the saved token functionality. If the specified
+    file exists, and contains a token with the right format,
+    return it. Otherwise, generate a new one and save it in
+    this location. If that fails, return an empty string.
+    """
     client_token = ""
     _debug("%s token path: %s", what.capitalize(), fpath)
     if exists(fpath):
@@ -48,22 +54,41 @@ def _saved_token(fpath, what):
 
 
 def version_token():
+    """
+    Returns the version token, which is just the
+    version string itself.
+    """
     return __version__
 
 
 @functools.lru_cache(maxsize=None)
 def client_token():
+    """
+    Returns the client token. If a token has not yet
+    been generated, an attempt is made to do so. If
+    that fails, an empty string is returned.
+    """
     fpath = join(expanduser("~/.conda"), "aau_token")
     return _saved_token(fpath, "client")
 
 
 @functools.lru_cache(maxsize=None)
 def session_token():
+    """
+    Returns the session token, generated randomly for each
+    execution of the process.
+    """
     return _random_token()
 
 
 @functools.lru_cache(maxsize=None)
 def environment_token(prefix=None):
+    """
+    Returns the environment token for the given prefix, or
+    sys.prefix if one is not supplied. If a token has not
+    yet been generated, an attempt is made to do so. If that
+    fails, an empty string is returned.
+    """
     if prefix is None:
         prefix = sys.prefix
     fpath = join(prefix, "etc", "aau_token")
@@ -72,12 +97,22 @@ def environment_token(prefix=None):
 
 @functools.lru_cache(maxsize=None)
 def all_tokens(prefix=None):
-    return Tokens(version_token(), client_token(), session_token(), environment_token())
+    """
+    Returns the token set, in the form of a Tokens namedtuple.
+    Fields: version, client, session, environment
+    """
+    return Tokens(
+        version_token(), client_token(), session_token(), environment_token(prefix)
+    )
 
 
 @functools.lru_cache(maxsize=None)
-def token_string():
-    values = all_tokens()
+def token_string(prefix=None):
+    """
+    Returns the token set, formatted into the string that is
+    appended to the conda user agent.
+    """
+    values = all_tokens(prefix)
     parts = ["aau/" + values.version]
     if values.client:
         parts.append("c/" + values.client)
