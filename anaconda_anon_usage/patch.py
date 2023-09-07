@@ -7,7 +7,8 @@ import sys
 from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
-from .api import _debug, token_string
+from .tokens import token_string
+from .utils import _debug
 
 
 def _new_user_agent(ctx):
