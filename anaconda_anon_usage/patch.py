@@ -14,10 +14,9 @@ def _new_user_agent(ctx):
     result = ctx._old_user_agent
     if context.anaconda_anon_usage:
         prefix = Context.checked_prefix or context.target_prefix or sys.prefix
-        if prefix:
-            token = token_string(prefix)
-            if token:
-                result += " " + token
+        token = token_string(prefix)
+        if token:
+            result += " " + token
     else:
         _debug("anaconda_anon_usage disabled by config")
     return result
@@ -34,11 +33,11 @@ def _patch_check_prefix():
 
     Context._old_check_prefix = cli_install.check_prefix
     cli_install.check_prefix = _new_check_prefix
-    context._initialized = True
+    context._aau_initialized = True
 
 
 def main(plugin=False):
-    if hasattr(Context, "_old_user_agent"):
+    if hasattr(Context, "_aau_initialized"):
         _debug("anaconda_anon_usage already active")
         return
     _debug("Applying anaconda_anon_usage context patch")
@@ -60,9 +59,9 @@ def main(plugin=False):
     # Saves the prefix used in a conda install command
     Context.checked_prefix = None
 
-    # conda.base.context._initialized
+    # conda.base.context._aau_initialized
     # This helps us determine if the patching is comlpete
-    context._initialized = False
+    context._aau_initialized = False
 
     if plugin:
         # The pre-command plugin avoids the circular import
