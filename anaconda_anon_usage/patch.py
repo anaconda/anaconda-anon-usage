@@ -72,10 +72,11 @@ def main(plugin=False):
         # We need to delay further. Schedule the patch for the
         # next time context.__init__ is called.
         _debug("Deferring anaconda_anon_usage cli.install patch")
-        _old__init__ = Context.__init__
+        _old__init__ = context.__init__
 
         def _new_init(*args, **kwargs):
             _patch_check_prefix()
+            context.__init__ = _old__init__
             _old__init__(*args, **kwargs)
 
-        Context.__init__ = _new_init
+        context.__init__ = _new_init
