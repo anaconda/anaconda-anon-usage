@@ -35,7 +35,7 @@ test:
     - set ANACONDA_ANON_USAGE_DEBUG=1  # [win]
     - conda info
     - python -m anaconda_anon_usage.install --status  # [variant=="patch"]
-    - python tests/test_config.py
+    - python tests/integration/test_config.py
 
 about:
   home: https://github.com/Anaconda-Platform/anaconda-anon-usage
