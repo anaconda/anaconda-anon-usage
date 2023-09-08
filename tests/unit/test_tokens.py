@@ -13,8 +13,10 @@ def test_environment_token_without_monkey_patching():
     assert tokens.environment_token() is not None
 
 
-def test_environment_token_with_target_prefix(monkeypatch, tmpdir):
-    assert tokens.environment_token(prefix=tmpdir) is not None
+def test_environment_token_with_target_prefix(tmpdir):
+    prefix_token = tokens.environment_token(prefix=tmpdir)
+    assert prefix_token is not None
+    assert prefix_token != tokens.environment_token()
 
 
 def test_token_string():
