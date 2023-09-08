@@ -24,7 +24,7 @@ def reset_patch(request):
                 ),
             ),
             (Context, "checked_prefix", None),
-            (cli_install, "check_prefix", context._old_check_prefix),
+            (cli_install, "check_prefix", Context._old_check_prefix),
         ):
             if hasattr(container, name):
                 delattr(container, name)
