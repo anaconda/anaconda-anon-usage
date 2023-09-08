@@ -121,14 +121,14 @@ jobs:
       if: matrix.os == 'windows-latest'
       shell: cmd
       run: |
-        cd tests
+        cd tests/integration
         start /wait AIDTest-1.0-Windows-x86_64.exe /S /D=%USERPROFILE%\aidtest
         call %USERPROFILE%\aidtest\Scripts\activate
         conda info
     - name: Run the installer (Unix)
       if: matrix.os != 'windows-latest'
       run: |
-        cd tests
+        cd tests/integration
         bash AIDTest*.sh -b -p ~/aidtest -k
         source ~/aidtest/bin/activate
         conda info
