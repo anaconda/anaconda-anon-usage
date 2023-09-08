@@ -52,7 +52,7 @@ def test_saved_token_existing_short(tmpdir):
     assert len(token_saved) == 22
 
 
-def test_saved_token_existing_long(tmpdir, token_cleanup):
+def test_saved_token_existing_long(tmpdir):
     token_path = tmpdir.join("aau_token")
     # setting a token up that is longer than the random ones
     longer_token = "c" * 23

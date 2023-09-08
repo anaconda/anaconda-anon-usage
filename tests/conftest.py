@@ -1,9 +1,9 @@
-from os import remove, rename
-from os.path import exists, join
+from os import remove
+from os.path import join
 
 import pytest
-
 from conda.base.context import Context
+
 from anaconda_anon_usage import tokens
 
 
@@ -12,12 +12,8 @@ def aau_token_path():
     return join(tokens.CONFIG_DIR, "aau_token")
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def token_cleanup(request, aau_token_path):
-    test_aau_token_path = aau_token_path + ".test"
-    if exists(aau_token_path):
-        rename(aau_token_path, test_aau_token_path)
-
     def _remove():
         try:
             remove(aau_token_path)
@@ -25,11 +21,6 @@ def token_cleanup(request, aau_token_path):
             pass
 
     request.addfinalizer(_remove)
-
-    yield
-
-    if exists(test_aau_token_path):
-        rename(test_aau_token_path, aau_token_path)
 
 
 def clear_cache():
