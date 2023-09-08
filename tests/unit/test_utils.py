@@ -1,33 +1,20 @@
-import importlib
 from os.path import exists, isdir
+
+import pytest
 
 from anaconda_anon_usage import utils
 
 
-def test_debug_disabled(capsys, monkeypatch):
-    monkeypatch.setenv("ANACONDA_ANON_USAGE_DEBUG", "false")
-    importlib.reload(utils)
+@pytest.mark.parametrize(
+    "toggle,out,err",
+    [(True, "", "debug testing\n"), (False, "", "")],
+)
+def test_debug(monkeypatch, capsys, toggle, out, err):
+    monkeypatch.setattr(utils, "DEBUG", toggle)
     utils._debug("debug %s", "testing")
     captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == ""
-
-
-def test_debug_enabled(monkeypatch, capsys):
-    monkeypatch.setattr(utils, "DEBUG", True)
-    utils._debug("debug %s", "testing")
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == "debug testing\n"
-
-
-def test_debug_enabled_envvar(monkeypatch, capsys):
-    monkeypatch.setenv("ANACONDA_ANON_USAGE_DEBUG", "true")
-    importlib.reload(utils)
-    utils._debug("debug %s", "testing")
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == "debug testing\n"
+    assert captured.out == out
+    assert captured.err == err
 
 
 def test_random_token():
