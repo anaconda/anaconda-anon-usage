@@ -2,7 +2,6 @@ import base64
 import os
 import sys
 from os.path import dirname, exists
-from uuid import uuid4
 
 DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG"))
 
@@ -13,7 +12,8 @@ def _debug(s, *args, error=False):
 
 
 def _random_token():
-    return base64.urlsafe_b64encode(uuid4().bytes).strip(b"=").decode("ascii")
+    data = os.urandom(16)
+    return base64.urlsafe_b64encode(data).strip(b"=").decode("ascii")
 
 
 def _saved_token(fpath, what):
