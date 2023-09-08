@@ -1,9 +1,6 @@
-from argparse import Namespace
 from os.path import exists
 
-from conda.base.context import context
-
-from anaconda_anon_usage import tokens, utils
+from anaconda_anon_usage import tokens
 
 
 def test_client_token(token_cleanup, aau_token_path):

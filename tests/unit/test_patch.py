@@ -1,7 +1,7 @@
 import pytest
 from conda.base.context import Context, context
 
-from anaconda_anon_usage import patch, tokens
+from anaconda_anon_usage import patch
 
 
 @pytest.fixture

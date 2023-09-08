@@ -1,4 +1,4 @@
-from os import rename, remove
+from os import remove, rename
 from os.path import exists, join
 
 import pytest
@@ -22,6 +22,7 @@ def token_cleanup(request, aau_token_path):
             remove(aau_token_path)
         except FileNotFoundError:
             pass
+
     request.addfinalizer(_remove)
 
     yield
