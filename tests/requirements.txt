@@ -1,6 +1,2 @@
 pytest
 pytest-cov
-pytest-mock
-pytest-timeout
-pytest-xdist
-conda-forge::pytest-xprocess
