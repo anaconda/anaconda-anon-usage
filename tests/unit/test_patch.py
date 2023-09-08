@@ -6,11 +6,12 @@ from anaconda_anon_usage import patch
 
 @pytest.fixture
 def reset_patch(request):
-    def resetter():
+    def _resetter():
         from conda.cli import install as cli_install
 
         for container, name, old_value in (
             (Context, "user_agent", Context._old_user_agent),
+            (Context, "_aau_initialized", None),
             (Context, "anaconda_anon_usage", None),
             (
                 Context,
@@ -31,24 +32,24 @@ def reset_patch(request):
                 continue
             setattr(container, name, old_value)
 
-    request.addfinalizer(resetter)
+    request.addfinalizer(_resetter)
 
 
 def test_new_user_agent(reset_patch):
-    with pytest.raises(AttributeError, match="_old_user_agent"):
-        assert patch._new_user_agent(context) is not None
     patch.main(plugin=True)
-    assert patch._new_user_agent(context) is not None
+    assert context.user_agent is not None
+    for term in ["conda/", "aau/", " e/", " c/", " s/"]:
+        assert term in context.user_agent
 
 
-def test_new_user_agent_no_token(monkeypatch, reset_patch):
+def test_user_agent_no_token(monkeypatch, reset_patch):
     monkeypatch.setattr(patch, "token_string", lambda prefix: "")
     patch.main(plugin=True)
-    user_agent = patch._new_user_agent(context)
-    assert user_agent is not None
-    assert " c/" not in user_agent
+    assert "conda/" in context.user_agent
+    assert "aau/" not in context.user_agent
 
 
-def test_main_already_patched(monkeypatch, reset_patch):
-    monkeypatch.setattr(Context, "_old_user_agent", "test", raising=False)
-    assert not hasattr(Context, "anaconda_anon_usage")
+def test_main_already_patched(reset_patch):
+    Context._aau_initialized = True
+    response = patch.main(plugin=True)
+    assert not response
