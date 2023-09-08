@@ -96,6 +96,12 @@ jobs:
           python tests\integration\test_config.py
           conda config --set solver classic
         )
+    - name: Test code (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: cmd
+      run: |
+        call testenv\Scripts\activate
+        pytest
     - name: Test environments (Unix)
       if: matrix.os != 'windows-latest'
       run: |
@@ -108,7 +114,8 @@ jobs:
           python tests/integration/test_config.py
           conda config --set solver classic
         fi
-    - name: Test code
+    - name: Test code (Unix)
+      if: matrix.os != 'windows-latest'
       run: |
         source ./testenv/bin/activate
         pytest
