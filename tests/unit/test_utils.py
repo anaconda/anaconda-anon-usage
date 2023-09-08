@@ -6,6 +6,7 @@ from anaconda_anon_usage import utils
 
 def test_debug_disabled(capsys, monkeypatch):
     monkeypatch.setenv("ANACONDA_ANON_USAGE_DEBUG", "false")
+    importlib.reload(utils)
     utils._debug("debug %s", "testing")
     captured = capsys.readouterr()
     assert captured.out == ""

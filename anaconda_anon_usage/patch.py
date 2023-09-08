@@ -38,9 +38,9 @@ def _patch_check_prefix():
 
 
 def main(plugin=False):
-    if hasattr(Context, "_aau_initialized"):
+    if hasattr(context, "_aau_initialized"):
         _debug("anaconda_anon_usage already active")
-        return
+        return False
     _debug("Applying anaconda_anon_usage context patch")
 
     # conda.base.context.Context.user_agent
@@ -80,3 +80,5 @@ def main(plugin=False):
             _old__init__(*args, **kwargs)
 
         context.__init__ = _new_init
+
+    return True
