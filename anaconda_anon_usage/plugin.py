@@ -6,7 +6,7 @@ def pre_command_patcher(command):
         from . import patch  # noqa
 
         patch.main(plugin=True)
-    except Exception as exc:
+    except Exception as exc:  # pragma: nocover
         print("Error loading anaconda-anon-usage:", exc)
 
 
