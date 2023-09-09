@@ -14,6 +14,8 @@ import sysconfig
 from os.path import basename, dirname, exists, join, relpath
 from traceback import format_exc
 
+from . import __version__
+
 THIS_DIR = dirname(__file__)
 
 
@@ -75,8 +77,9 @@ def tryop(op, *args, **kwargs):
         return False
 
 
+PATCH_NAME = b"anaconda_anon_usage"
 PATCH_TEXT = b"""
-# anaconda_anon_usage p3
+# %s %s
 # The following code hooks anaconda-anon-usage into the conda
 # context system. It augments the request header data that conda
 # delivers to package servers during index and package
@@ -93,8 +96,10 @@ except Exception as exc:
     print("Error loading anaconda_anon_usage:", exc, file=sys.stderr)
     if os.environ.get('ANACONDA_ANON_USAGE_RAISE'):
         raise
-# anaconda_ident p3
-"""
+""" % (
+    PATCH_NAME,
+    __version__.encode("utf-8"),
+)
 
 __sp_dir = None
 
@@ -114,7 +119,7 @@ def _eolmatch(text, ptext):
     return ptext
 
 
-def _read(pfile, patch_text):
+def _read(pfile, patch_text, patch_name):
     if not exists(pfile):
         return None, "NOT PRESENT"
     with open(pfile, "rb") as fp:
@@ -122,28 +127,24 @@ def _read(pfile, patch_text):
     patch_text = _eolmatch(text, patch_text)
     if text.endswith(patch_text):
         status = "ENABLED"
-    elif b"anaconda_ident" in text:
+    elif patch_name in text:
         status = "NEEDS UPDATE"
     else:
         status = "DISABLED"
     return text, status
 
 
-def _strip(text, patch_text):
-    found = False
-    patch_text = _eolmatch(text, patch_text)
-    if text.endswith(patch_text):
-        text = text[: -len(patch_text)]
-        found = True
-    if not found and b"# anaconda_ident " in text:
-        text = text[: text.find(b"# anaconda_ident p")]
+def _strip(text, patch_name):
+    ndx = text.find(b"# " + patch_name)
+    if ndx >= 0:
+        text = text[:ndx]
     return text
 
 
-def _patch(args, pfile, patch_text, safety_len):
+def _patch(args, pfile, patch_text, patch_name):
     if verbose:
         print(f"patch target: ...{relpath(pfile, _sp_dir())}")
-    text, status = _read(pfile, patch_text)
+    text, status = _read(pfile, patch_text, patch_name)
     if verbose:
         print(f"| status: {status}")
     if status == "NOT PRESENT":
@@ -168,17 +169,14 @@ def _patch(args, pfile, patch_text, safety_len):
         print(f"| {status} patch...", end="")
     renamed = False
     try:
-        text = _strip(text, patch_text)
-        # safety valve
-        if len(text) < safety_len:
-            print("safety check failed")
-            error("! unexpected error, no changes made", fatal=True)
+        text = _strip(text, patch_name)
         # We do not append to the original file because this is
         # likely a hard link into the package cache, so doing so
         # would lead to conda flagging package corruption.
         with open(pfile + ".new", "wb") as fp:
             fp.write(text)
             if status != "removing":
+                patch_text = _eolmatch(text, patch_text)
                 fp.write(patch_text)
         pfile_orig = pfile + ".orig"
         if exists(pfile_orig):
@@ -196,17 +194,18 @@ def _patch(args, pfile, patch_text, safety_len):
         print(f"{what}: {exc}")
         if renamed:
             os.rename(pfile_orig, pfile)
-    text, status = _read(pfile, patch_text)
+    text, status = _read(pfile, patch_text, patch_name)
     if verbose:
         print(f"| new status: {status}")
 
 
 def manage_patch(args):
+    global PATCH_TEXT
+    global PATCH_NAME
     if verbose:
         print("conda prefix:", sys.prefix)
-    global PATCH_TEXT
     pfile = join(_sp_dir(), "conda", "base", "context.py")
-    _patch(args, pfile, PATCH_TEXT, 60000)
+    _patch(args, pfile, PATCH_TEXT, PATCH_NAME)
 
 
 def main(args=None):
