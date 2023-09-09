@@ -6,7 +6,7 @@ from anaconda_anon_usage import patch
 def test_new_user_agent():
     patch.main(plugin=True)
     assert context.user_agent is not None
-    for term in ["conda/", "aau/", " e/", " c/", " s/"]:
+    for term in ["conda/", "aau/", "e/", "c/", "s/"]:
         assert term in context.user_agent
 
 

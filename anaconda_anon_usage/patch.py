@@ -13,12 +13,14 @@ from .utils import _debug
 
 def _new_user_agent(ctx):
     result = ctx._old_user_agent
-    prefix = Context.checked_prefix or context.target_prefix or sys.prefix
+    prefix = (
+        getattr(Context, "checked_prefix", None) or context.target_prefix or sys.prefix
+    )
     try:
         token = token_string(prefix, context.anaconda_anon_usage)
         if token:
             result += " " + token
-    except Exception:
+    except Exception:  # pragma: nocover
         pass
     return result
 

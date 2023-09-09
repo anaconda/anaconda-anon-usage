@@ -21,9 +21,18 @@ def test_environment_token_with_target_prefix(tmpdir):
 
 def test_token_string():
     token_string = tokens.token_string()
-    assert " c/" in token_string
-    assert " s/" in token_string
-    assert " e/" in token_string
+    assert "aau/" in token_string
+    assert "c/" in token_string
+    assert "s/" in token_string
+    assert "e/" in token_string
+
+
+def test_token_string_disabled():
+    token_string = tokens.token_string(enabled=False)
+    assert "aau/" in token_string
+    assert "c/" not in token_string
+    assert "s/" not in token_string
+    assert "e/" not in token_string
 
 
 def test_token_string_no_client_token(monkeypatch):
@@ -31,9 +40,9 @@ def test_token_string_no_client_token(monkeypatch):
     monkeypatch.setattr(tokens, "_saved_token", lambda fpath, what: "")
 
     token_string = tokens.token_string()
-    assert " c/" not in token_string
-    assert " s/" in token_string
-    assert " e/env_token" in token_string
+    assert "c/" not in token_string
+    assert "s/" in token_string
+    assert "e/env_token" in token_string
 
 
 def test_token_string_no_environment_token(
@@ -42,6 +51,6 @@ def test_token_string_no_environment_token(
     monkeypatch.setattr(tokens, "environment_token", lambda prefix: "")
 
     token_string = tokens.token_string()
-    assert " c/" in token_string
-    assert " s/" in token_string
-    assert " e/" not in token_string
+    assert "c/" in token_string
+    assert "s/" in token_string
+    assert "e/" not in token_string
