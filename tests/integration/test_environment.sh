@@ -51,7 +51,7 @@ echo "------------------------"
 echo
 echo -n "user agent (enabled) ... "
 user_agent=$(echo "$cinfo" | sed -nE 's@.*user-agent : (.*)@\1@p')
-if echo "$user_agent" | grep -q "aau/"; then
+if echo "$user_agent" | grep -qE " c/.* s/.* e/"; then
   echo "yes: $user_agent"
 else
   echo "NO: $user_agent"
@@ -60,7 +60,7 @@ fi
 
 echo -n "user agent (disabled) ... "
 user_agent=$(echo "$cinfo_d" | sed -nE 's@.*user-agent : (.*)@\1@p')
-if echo "$user_agent" | grep -q "aau/"; then
+if echo "$user_agent" | grep -qE " (c|s|e)/"; then
   echo "NO: $user_agent"
   success=no
 else
