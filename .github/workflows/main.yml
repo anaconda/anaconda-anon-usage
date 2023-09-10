@@ -90,6 +90,8 @@ jobs:
         conda info 1>output.txt 2>&1 | type output.txt
         find "Error loading" output.txt >nul
         if %errorlevel% equ 0 exit -1
+        conda create -n testchild1 --yes
+        conda create -n testchild2 --yes
         python tests\integration\test_config.py
         if "%MAMBA%" equ "yes" (
           conda config --set solver libmamba
