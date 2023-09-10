@@ -74,7 +74,7 @@ jobs:
         source $CONDA/etc/profile.d/conda.sh
         pkg=local::anaconda-anon-usage
         conda install anaconda-client constructor conda-index $pkg
-        if [[ ! "${{ matrix.cversion }}" =~ 4.* ]]; then
+        if [[ "${{ matrix.cversion }}" == 23.7.* ]]; then
           mamba=conda-libmamba-solver
           echo "MAMBA=yes" >> "$GITHUB_ENV"
         fi
