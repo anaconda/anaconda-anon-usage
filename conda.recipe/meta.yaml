@@ -34,7 +34,9 @@ test:
     - tests
   commands:
     - export ANACONDA_ANON_USAGE_DEBUG=1  # [unix]
+    - export PYTHONUNBUFFERED=1  # [unix]
     - set ANACONDA_ANON_USAGE_DEBUG=1  # [win]
+    - set PYTHONUNBUFFERED=1 # [win]
     - conda info
     - python -m anaconda_anon_usage.install --status  # [variant=="patch"]
     - pytest -v tests/unit
