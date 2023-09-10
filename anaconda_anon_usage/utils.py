@@ -1,7 +1,7 @@
+import atexit
 import base64
 import os
 import sys
-import atexit
 from os.path import dirname, exists
 from threading import RLock
 
@@ -59,7 +59,7 @@ def _random_token(what="random"):
 def _final_attempt():
     """
     Called upon the graceful exit from conda, this attempts to
-    write an environment token that was deferred becuase the
+    write an environment token that was deferred because the
     environment directory was not yet available.
     """
     global DEFERRED

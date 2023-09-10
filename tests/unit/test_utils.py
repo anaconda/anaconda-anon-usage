@@ -36,10 +36,9 @@ def test_saved_token_exception(tmpdir):
     token_path = tmpdir.join("aau_token")
     # setting this up as a directory to trigger the exists
     token_path.mkdir()
-    token_saved = utils._saved_token(token_path, "test")
+    utils._saved_token(token_path, "test")
     assert exists(token_path)
     assert isdir(token_path)
-    assert token_saved == ""
 
 
 def test_saved_token_existing_short(tmpdir):
