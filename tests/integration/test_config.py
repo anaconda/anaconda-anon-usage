@@ -7,7 +7,7 @@ nfailed = 0
 
 KEY = "anaconda_anon_usage"
 ENVKEY = "CONDA_ANACONDA_ANON_USAGE"
-os.environ["ANACONDA_ANON_USAGE_DEBUG"] = "1"
+DEBUG_PREFIX = os.environ["ANACONDA_ANON_USAGE_DEBUG_PREFIX"] = "AAU|"
 
 condarc = join(expanduser("~"), ".condarc")
 if not isfile(condarc):
@@ -25,9 +25,9 @@ print("current condarc mode:", f_mode)
 def _config(value):
     if value == "default":
         _config("true")
-        subprocess.run(["conda", "config", "--remove-key", KEY])
+        subprocess.run(["conda", "config", "--remove-key", KEY], capture_output=True)
     else:
-        subprocess.run(["conda", "config", "--set", KEY, value])
+        subprocess.run(["conda", "config", "--set", KEY, value], capture_output=True)
 
 
 all_modes = ("true", "false", "yes", "no", "on", "off", "default")
@@ -36,6 +36,7 @@ all_tokens = {"aau", "c", "s", "e"}
 aau_only = {"aau"}
 
 
+first = True
 other_tokens = {}
 all_sessions = set()
 for ctype in ("env", "cfg"):
@@ -56,11 +57,12 @@ for ctype in ("env", "cfg"):
         proc = subprocess.run(
             [
                 "conda",
-                "search",
+                "install",
                 "-vvv",
                 "--override-channels",
                 "-c",
                 "https://repo.anaconda.com/pkgs/fakechannel",
+                "fakepackage",
             ],
             check=False,
             capture_output=True,
@@ -68,7 +70,9 @@ for ctype in ("env", "cfg"):
         )
         user_agent = [v for v in proc.stderr.splitlines() if "User-Agent" in v]
         user_agent = user_agent[0].split(":", 1)[-1].strip() if user_agent else ""
-        print(user_agent)
+        if first:
+            print(user_agent)
+            first = False
         tokens = dict(t.split("/", 1) for t in user_agent.split())
         tokens = {k: v for k, v in tokens.items() if k in all_tokens}
         status = []
@@ -93,9 +97,11 @@ for ctype in ("env", "cfg"):
             status = ", ".join(status)
         else:
             status = "OK"
-        print(
-            f"{ctype}/{mode}:", status, " ".join(f"{k}/{v}" for k, v in tokens.items())
-        )
+        print(f"{ctype}/{mode}:", status)
+        if DEBUG_PREFIX:
+            for line in proc.stderr.splitlines():
+                if line.startswith(DEBUG_PREFIX):
+                    print("|", line[4:])
 
 if f_mode == "missing":
     print("removing ~/.condarc")

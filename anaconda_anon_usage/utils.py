@@ -2,18 +2,45 @@ import base64
 import os
 import sys
 from os.path import dirname, exists
+from threading import RLock
 
-DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG"))
+DPREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX") or ""
+DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG")) or DPREFIX
+
+
+# While lru_cache is thread safe, it does not prevent two threads
+# from beginning the same computation. This simple cache mechanism
+# uses a lock to ensure that only one thread even attempts.
+CACHE = {}
+LOCK = RLock()
+
+
+def cached(func):
+    def call_if_needed(*args, **kwargs):
+        global CACHE
+        key = (func.__name__, args, tuple(kwargs.items()))
+        if key not in CACHE:
+            with LOCK:
+                # Need to check again, just in case the
+                # computation was happening between the
+                # first check and the lock acquisition.
+                if key not in CACHE:
+                    CACHE[key] = func(*args, **kwargs)
+        return CACHE[key]
+
+    return call_if_needed
 
 
 def _debug(s, *args, error=False):
     if error or DEBUG:
-        print(s % args, file=sys.stderr)
+        print((DPREFIX + s) % args, file=sys.stderr)
 
 
-def _random_token():
+def _random_token(what):
     data = os.urandom(16)
-    return base64.urlsafe_b64encode(data).strip(b"=").decode("ascii")
+    result = base64.urlsafe_b64encode(data).strip(b"=").decode("ascii")
+    _debug("Generated %s token: %s", what, result)
+    return result
 
 
 def _saved_token(fpath, what):
@@ -36,12 +63,11 @@ def _saved_token(fpath, what):
     if len(client_token) < 22:
         if len(client_token) > 0:
             _debug("Generating longer token")
-        client_token = _random_token()
+        client_token = _random_token(what)
         try:
             os.makedirs(dirname(fpath), exist_ok=True)
             with open(fpath, "w") as fp:
                 fp.write(client_token)
-            _debug("Generated new token: %s", client_token)
             _debug("%s token saved: %s", what.capitalize(), fpath)
         except Exception as exc:
             _debug("Unexpected error writing: %s\n  %s", fpath, exc, error=True)
