@@ -28,6 +28,8 @@ requirements:
 test:
   requires:
     - conda
+    - pytest
+    - pytest-cov
   source_files:
     - tests
   commands:
@@ -35,6 +37,7 @@ test:
     - set ANACONDA_ANON_USAGE_DEBUG=1  # [win]
     - conda info
     - python -m anaconda_anon_usage.install --status  # [variant=="patch"]
+    - pytest -v tests/unit
     - python tests/integration/test_config.py
 
 about:

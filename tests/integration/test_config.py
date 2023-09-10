@@ -8,6 +8,7 @@ nfailed = 0
 KEY = "anaconda_anon_usage"
 ENVKEY = "CONDA_ANACONDA_ANON_USAGE"
 DEBUG_PREFIX = os.environ["ANACONDA_ANON_USAGE_DEBUG_PREFIX"] = "AAU|"
+FAST_EXIT = "--fast" in sys.argv
 
 condarc = join(expanduser("~"), ".condarc")
 if not isfile(condarc):
@@ -70,6 +71,15 @@ for ctype in ("env", "cfg"):
         )
         user_agent = [v for v in proc.stderr.splitlines() if "User-Agent" in v]
         user_agent = user_agent[0].split(":", 1)[-1].strip() if user_agent else ""
+        if not user_agent:
+            print(f"{ctype}/{mode}: ERROR")
+            for line in proc.stderr.splitlines():
+                if line.strip():
+                    print("|", line)
+            nfailed += 1
+            if FAST_EXIT:
+                break
+            continue
         if first:
             print(user_agent)
             first = False
@@ -102,6 +112,10 @@ for ctype in ("env", "cfg"):
             for line in proc.stderr.splitlines():
                 if line.startswith(DEBUG_PREFIX):
                     print("|", line[4:])
+        if status != "OK" or DEBUG_PREFIX:
+            print("|", user_agent)
+        if status != "OK" and FAST_EXIT:
+            break
 
 if f_mode == "missing":
     print("removing ~/.condarc")

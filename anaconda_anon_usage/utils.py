@@ -31,12 +31,17 @@ def cached(func):
     return call_if_needed
 
 
+def _cache_clear():
+    global CACHE
+    CACHE.clear()
+
+
 def _debug(s, *args, error=False):
     if error or DEBUG:
         print((DPREFIX + s) % args, file=sys.stderr)
 
 
-def _random_token(what):
+def _random_token(what="random"):
     data = os.urandom(16)
     result = base64.urlsafe_b64encode(data).strip(b"=").decode("ascii")
     _debug("Generated %s token: %s", what, result)
