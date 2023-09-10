@@ -1,13 +1,14 @@
+import json
 import os
 import subprocess
 import sys
-from os.path import expanduser, isfile, join
+from os.path import basename, expanduser, isfile, join
 
 nfailed = 0
 
 KEY = "anaconda_anon_usage"
 ENVKEY = "CONDA_ANACONDA_ANON_USAGE"
-DEBUG_PREFIX = os.environ["ANACONDA_ANON_USAGE_DEBUG_PREFIX"] = "AAU|"
+DEBUG_PREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX")
 FAST_EXIT = "--fast" in sys.argv
 
 condarc = join(expanduser("~"), ".condarc")
@@ -31,11 +32,27 @@ def _config(value):
         subprocess.run(["conda", "config", "--set", KEY, value], capture_output=True)
 
 
-all_modes = ("true", "false", "yes", "no", "on", "off", "default")
+all_modes = ["true", "false", "yes", "no", "on", "off", "default"]
 yes_modes = ("true", "yes", "on", "default")
 all_tokens = {"aau", "c", "s", "e"}
 aau_only = {"aau"}
 
+proc = subprocess.run(
+    ["conda", "info", "--envs", "--json"],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+pfx_s = join(sys.prefix, "envs") + os.sep
+pdata = json.loads(proc.stdout)
+envs = [e for e in pdata["envs"] if e == sys.prefix or e.startswith(pfx_s)]
+envs = {("base" if e == sys.prefix else basename(e)): e for e in envs}
+for env in envs:
+    # Test each env twice to confirm that
+    # we get the same token each time
+    all_modes.append("e/" + env)
+    all_modes.append("e/" + env)
+maxlen = max(len(e) for e in envs)
 
 first = True
 other_tokens = {}
@@ -44,6 +61,11 @@ for ctype in ("env", "cfg"):
     if ctype == "cfg" and ENVKEY in os.environ:
         del os.environ[ENVKEY]
     for mode in all_modes:
+        if mode.startswith("e/"):
+            mode, envname = "default", mode[2:]
+            envpath = envs[envname]
+        else:
+            envname = envpath = ""
         if mode == "default" and ctype == "env":
             continue
         enabled = mode in yes_modes
@@ -55,34 +77,45 @@ for ctype in ("env", "cfg"):
         # Make sure to leave override-channels and the full channel URL in here.
         # This allows this command to run fully no matter what we do to channel_alias
         # and default_channels
+        cmd = [
+            "conda",
+            "install",
+            "-vvv",
+            "--override-channels",
+            "-c",
+            "https://repo.anaconda.com/pkgs/fakechannel",
+            "fakepackage",
+            "fakepackage",
+        ]
+        if envname:
+            cmd.extend(["-n", envname])
+        skip = False
         proc = subprocess.run(
-            [
-                "conda",
-                "install",
-                "-vvv",
-                "--override-channels",
-                "-c",
-                "https://repo.anaconda.com/pkgs/fakechannel",
-                "fakepackage",
-            ],
+            cmd,
             check=False,
             capture_output=True,
             text=True,
         )
         user_agent = [v for v in proc.stderr.splitlines() if "User-Agent" in v]
         user_agent = user_agent[0].split(":", 1)[-1].strip() if user_agent else ""
-        if not user_agent:
-            print(f"{ctype}/{mode}: ERROR")
+        if first:
+            if user_agent:
+                print(user_agent)
+            print("")
+            print("Configuration tests")
+            print("-" * (maxlen + 19))
+            first = False
+        if not user_agent or skip:
+            print(f"{ctype} {mode:<7} | {envname:{maxlen}} | ERROR")
             for line in proc.stderr.splitlines():
                 if line.strip():
                     print("|", line)
+            if user_agent:
+                print("|", user_agent)
             nfailed += 1
             if FAST_EXIT:
                 break
             continue
-        if first:
-            print(user_agent)
-            first = False
         tokens = dict(t.split("/", 1) for t in user_agent.split())
         tokens = {k: v for k, v in tokens.items() if k in all_tokens}
         status = []
@@ -98,16 +131,19 @@ for ctype in ("env", "cfg"):
             if k == "s":
                 if v in all_sessions:
                     status.append("DUPLICATE: s")
-            elif other_tokens.setdefault(k, v) != v:
-                modified.append(k)
+                continue
+            if k == "e":
+                k = "e/" + (envname or "base")
+            if other_tokens.setdefault(k, v) != v:
+                modified.append(k.split("/")[0])
         if modified:
-            status.append(f"MODIFIED: {'/'.join(modified)}")
+            status.append(f"MODIFIED: {','.join(modified)}")
         if status:
             nfailed += 1
             status = ", ".join(status)
         else:
             status = "OK"
-        print(f"{ctype}/{mode}:", status)
+        print(f"{ctype} {mode:<7} | {envname:{maxlen}} | {status}")
         if DEBUG_PREFIX:
             for line in proc.stderr.splitlines():
                 if line.startswith(DEBUG_PREFIX):
@@ -116,7 +152,9 @@ for ctype in ("env", "cfg"):
             print("|", user_agent)
         if status != "OK" and FAST_EXIT:
             break
+print("-" * (maxlen + 19))
 
+print("")
 if f_mode == "missing":
     print("removing ~/.condarc")
     try:
@@ -131,5 +169,24 @@ else:
     print("restoring config value:", f_mode)
     _config(f_mode)
 
+print("")
+print("Checking environment tokens")
+print("---------------------------")
+for k, v in other_tokens.items():
+    if k.startswith("e/"):
+        pfx = envs[k[2:]]
+        tpath = join(pfx, "etc", "aau_token")
+        try:
+            with open(tpath) as fp:
+                token = fp.read().strip()
+        except Exception:
+            token = ""
+        status = "OK" if token == v else "XX"
+        print(f"{k[2:]:{maxlen}} | {v} {token} | {status}")
+        if token != v:
+            nfailed += 1
+print("---------------------------")
+
+print("")
 print("FAILURES:", nfailed)
 sys.exit(nfailed)
