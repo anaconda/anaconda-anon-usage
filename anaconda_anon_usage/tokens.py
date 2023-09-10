@@ -55,7 +55,7 @@ def environment_token(prefix=None):
     if prefix is None:
         prefix = sys.prefix
     fpath = join(prefix, "etc", "aau_token")
-    return _saved_token(fpath, "environment")
+    return _saved_token(fpath, "environment", prefix)
 
 
 @cached

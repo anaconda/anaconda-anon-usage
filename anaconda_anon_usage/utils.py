@@ -1,12 +1,20 @@
 import base64
 import os
 import sys
+import atexit
 from os.path import dirname, exists
 from threading import RLock
 
 DPREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX") or ""
 DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG")) or DPREFIX
 
+# When creating a new environment, the environment token will be
+# created in advance of the action creation of the standard conda
+# directory structure. If we write the token to its location and
+# then the creation is interrupted, the directory will now be in
+# a state where conda is unwilling to install into it, thinking
+# it is a non-empty non-conda directory.
+DEFERRED = []
 
 # While lru_cache is thread safe, it does not prevent two threads
 # from beginning the same computation. This simple cache mechanism
@@ -48,13 +56,46 @@ def _random_token(what="random"):
     return result
 
 
-def _saved_token(fpath, what):
+def _final_attempt():
+    """
+    Called upon the graceful exit from conda, this attempts to
+    write an environment token that was deferred becuase the
+    environment directory was not yet available.
+    """
+    global DEFERRED
+    for must_exist, fpath, token in DEFERRED:
+        _write_attempt(must_exist, fpath, token)
+
+
+atexit.register(_final_attempt)
+
+
+def _write_attempt(must_exist, fpath, client_token):
+    """
+    Attempt to write the token to the given location.
+    Return True with success, False otherwise.
+    """
+    if must_exist and not exists(must_exist):
+        _debug("Directory not ready: %s", must_exist)
+        return False
+    try:
+        os.makedirs(dirname(fpath), exist_ok=True)
+        with open(fpath, "w") as fp:
+            fp.write(client_token)
+        _debug("Token saved: %s", fpath)
+        return True
+    except Exception as exc:
+        _debug("Unexpected error writing: %s\n  %s", fpath, exc, error=True)
+
+
+def _saved_token(fpath, what, must_exist=None):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
     return it. Otherwise, generate a new one and save it in
     this location. If that fails, return an empty string.
     """
+    global DEFERRED
     client_token = ""
     _debug("%s token path: %s", what.capitalize(), fpath)
     if exists(fpath):
@@ -69,12 +110,9 @@ def _saved_token(fpath, what):
         if len(client_token) > 0:
             _debug("Generating longer token")
         client_token = _random_token(what)
-        try:
-            os.makedirs(dirname(fpath), exist_ok=True)
-            with open(fpath, "w") as fp:
-                fp.write(client_token)
-            _debug("%s token saved: %s", what.capitalize(), fpath)
-        except Exception as exc:
-            _debug("Unexpected error writing: %s\n  %s", fpath, exc, error=True)
-            client_token = ""
+        if not _write_attempt(must_exist, fpath, client_token):
+            # If the environment has not yet been created we need
+            # to defer the token write until later.
+            _debug("Deferring token write")
+            DEFERRED.append((must_exist, fpath, client_token))
     return client_token
