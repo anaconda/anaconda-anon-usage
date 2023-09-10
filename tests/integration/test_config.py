@@ -57,6 +57,7 @@ maxlen = max(len(e) for e in envs)
 first = True
 other_tokens = {}
 all_sessions = set()
+all_environments = set()
 for ctype in ("env", "cfg"):
     if ctype == "cfg" and ENVKEY in os.environ:
         del os.environ[ENVKEY]
@@ -127,15 +128,22 @@ for ctype in ("env", "cfg"):
         if extras:
             status.append(f"NOT CLEARED: {'/'.join(extras)}")
         modified = []
+        duplicated = []
         for k, v in tokens.items():
             if k == "s":
                 if v in all_sessions:
-                    status.append("DUPLICATE: s")
+                    duplicated.append("s")
+                all_sessions.add(v)
                 continue
             if k == "e":
                 k = "e/" + (envname or "base")
+                if k not in other_tokens and v in all_environments:
+                    duplicated.append("e")
+                all_environments.add(v)
             if other_tokens.setdefault(k, v) != v:
                 modified.append(k.split("/")[0])
+        if duplicated:
+            status.append(f"DUPLICATED: {','.join(duplicated)}")
         if modified:
             status.append(f"MODIFIED: {','.join(modified)}")
         if status:
