@@ -1,3 +1,4 @@
+import sys
 from os.path import exists, isdir
 
 import pytest
@@ -15,6 +16,14 @@ def test_debug(monkeypatch, capsys, toggle, out, err):
     captured = capsys.readouterr()
     assert captured.out == out
     assert captured.err == err
+
+
+def test_debug_json(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["--json"])
+    utils._debug("debug %s", "testing")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_random_token():

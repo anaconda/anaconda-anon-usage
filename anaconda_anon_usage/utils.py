@@ -6,7 +6,9 @@ from os.path import dirname, exists
 from threading import RLock
 
 DPREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX") or ""
-DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG")) or DPREFIX
+DEBUG = (
+    bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG")) or DPREFIX
+) and not "--json" in sys.argv
 
 # When creating a new environment, the environment token will be
 # created in advance of the action creation of the standard conda
