@@ -110,7 +110,7 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
         return WRITE_SUCCESS
     except Exception as exc:
         # If we get here, a second attempt is unlikely to succeed,
-        # so we return True so that we don't schedule the re-attempt.
+        # so we return a code to indicate that we should not re-attempt.
         if getattr(exc, "errno", None) in (errno.EACCES, errno.EPERM, errno.EROFS):
             _debug("No write permissions; cannot write token")
         else:
