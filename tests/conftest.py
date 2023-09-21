@@ -28,8 +28,6 @@ def client_token_string_cache_cleanup(request):
     request.addfinalizer(utils._cache_clear)
 
 
-
-
 @pytest.fixture(autouse=True)
 def reset_patch(request):
     def _resetter():
