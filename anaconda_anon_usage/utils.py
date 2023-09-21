@@ -151,7 +151,7 @@ def _saved_token(fpath, what, must_exist=None):
         if status == WRITE_FAIL:
             _debug("Returning blank %s token", what)
             return ""
-        if status == WRITE_DEFER:
+        elif status == WRITE_DEFER:
             # If the environment has not yet been created we need
             # to defer the token write until later.
             _debug("Deferring token write")

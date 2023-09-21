@@ -56,16 +56,19 @@ def test_token_string_no_environment_token(
     assert "e/" not in token_string
 
 
-def test_token_string_full_readonly():
-    utils.READ_CHAOS = utils.WRITE_CHAOS = "ce"
+def test_token_string_full_readonly(monkeypatch):
+    monkeypatch.setattr(utils, "READ_CHAOS", "ce")
+    monkeypatch.setattr(utils, "WRITE_CHAOS", "ce")
     token_string = tokens.token_string()
     assert "c/" not in token_string
     assert "s/" in token_string
     assert "e/" not in token_string
 
 
-def test_token_string_env_readonly():
-    utils.READ_CHAOS = utils.WRITE_CHAOS = "e"
+def test_token_string_env_readonly(monkeypatch):
+    monkeypatch.setattr(utils, "READ_CHAOS", "e")
+    monkeypatch.setattr(utils, "WRITE_CHAOS", "e")
+
     token_string = tokens.token_string()
     assert "c/" in token_string
     assert "s/" in token_string

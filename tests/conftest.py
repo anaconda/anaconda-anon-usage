@@ -28,12 +28,6 @@ def client_token_string_cache_cleanup(request):
     request.addfinalizer(utils._cache_clear)
 
 
-@pytest.fixture(autouse=True)
-def client_token_string_clear_chaos(request):
-    def _cleanup():
-        utils.READ_CHAOS = utils.WRITE_CHAOS = ""
-
-    request.addfinalizer(_cleanup)
 
 
 @pytest.fixture(autouse=True)

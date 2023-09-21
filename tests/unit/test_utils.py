@@ -43,27 +43,27 @@ def test_saved_token_exception(tmpdir):
     assert token_value == ""
 
 
-def test_read_chaos(tmpdir):
+def test_read_chaos(monkeypatch, tmpdir):
     token_path = tmpdir.join("aau_token")
     token1 = utils._saved_token(token_path, "environment")
     assert token1
-    utils.READ_CHAOS = "e"
+    monkeypatch.setattr(utils, "READ_CHAOS", "e")
     token2 = utils._saved_token(token_path, "environment")
     assert token2 and token1 != token2
-    utils.READ_CHAOS = ""
+    monkeypatch.setattr(utils, "READ_CHAOS", "")
     token3 = utils._saved_token(token_path, "environment")
     assert token3 == token2
 
 
-def test_write_chaos(tmpdir):
+def test_write_chaos(monkeypatch, tmpdir):
     token_path = tmpdir.join("aau_token")
-    utils.WRITE_CHAOS = "e"
+    monkeypatch.setattr(utils, "WRITE_CHAOS", "e")
     token1 = utils._saved_token(token_path, "environment")
     assert not token1 and not token_path.exists()
-    utils.WRITE_CHAOS = ""
+    monkeypatch.setattr(utils, "WRITE_CHAOS", "")
     token2 = utils._saved_token(token_path, "environment")
     assert token2 and token_path.exists()
-    utils.WRITE_CHAOS = "e"
+    monkeypatch.setattr(utils, "WRITE_CHAOS", "e")
     token3 = utils._saved_token(token_path, "environment")
     assert token3 == token2
 
