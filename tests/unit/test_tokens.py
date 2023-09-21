@@ -1,6 +1,6 @@
 from os.path import exists
 
-from anaconda_anon_usage import tokens
+from anaconda_anon_usage import tokens, utils
 
 
 def test_client_token(aau_token_path):
@@ -49,6 +49,25 @@ def test_token_string_no_environment_token(
     monkeypatch,
 ):
     monkeypatch.setattr(tokens, "environment_token", lambda prefix: "")
+
+    token_string = tokens.token_string()
+    assert "c/" in token_string
+    assert "s/" in token_string
+    assert "e/" not in token_string
+
+
+def test_token_string_full_readonly(monkeypatch):
+    monkeypatch.setattr(utils, "READ_CHAOS", "ce")
+    monkeypatch.setattr(utils, "WRITE_CHAOS", "ce")
+    token_string = tokens.token_string()
+    assert "c/" not in token_string
+    assert "s/" in token_string
+    assert "e/" not in token_string
+
+
+def test_token_string_env_readonly(monkeypatch):
+    monkeypatch.setattr(utils, "READ_CHAOS", "e")
+    monkeypatch.setattr(utils, "WRITE_CHAOS", "e")
 
     token_string = tokens.token_string()
     assert "c/" in token_string

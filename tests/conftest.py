@@ -4,8 +4,7 @@ from os.path import join
 import pytest
 from conda.base.context import Context
 
-from anaconda_anon_usage import tokens
-from anaconda_anon_usage.utils import _cache_clear
+from anaconda_anon_usage import tokens, utils
 
 
 @pytest.fixture
@@ -26,7 +25,7 @@ def token_cleanup(request, aau_token_path):
 
 @pytest.fixture(autouse=True)
 def client_token_string_cache_cleanup(request):
-    request.addfinalizer(_cache_clear)
+    request.addfinalizer(utils._cache_clear)
 
 
 @pytest.fixture(autouse=True)
