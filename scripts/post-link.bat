@@ -1,3 +1,3 @@
 @echo off
 if "%CONDA_PREFIX%"=="" (set "pfx=%PREFIX%") else (set "pfx=%CONDA_PREFIX%")
-python -m anaconda_anon_usage.install --enable --quiet >>"%pfx%\.messages.txt" 2>&1 && if errorlevel 1 exit 1
+%pfx%\python.exe -m anaconda_anon_usage.install --enable --quiet >>"%pfx%\.messages.txt" 2>&1 && if errorlevel 1 exit 1
