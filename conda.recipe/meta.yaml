@@ -1,4 +1,5 @@
 {% set data = load_setup_py_data() %}
+{% set number = 0 %}
 
 package:
   name: anaconda-anon-usage
@@ -8,6 +9,11 @@ source:
   path: ..
 
 build:
+  # Use a build number difference to ensure that the plugin
+  # variant is slightly preferred by conda's solver.
+  number: {{ number + 100 }}  # [variant=="plugin"]
+  number: {{ number }}        # [variant=="patch"]
+  string: py_{{ PKG_BUILDNUM }}
   noarch: python  # [not win]
   script_env:
    - NEED_SCRIPTS=no   # [variant=="plugin"]
