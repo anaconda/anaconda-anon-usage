@@ -12,7 +12,6 @@ import os
 import sys
 import sysconfig
 from os.path import basename, dirname, exists, join, relpath
-from traceback import format_exc
 
 from . import __version__
 
@@ -36,6 +35,8 @@ def configure_parser():
         "pre-unlink script. It is not useful in normal operation; to disable "
         "the telemetry, use conda config --set anaconda_anon_usage false.",
     )
+    # For testing only: exit with -1 if not enabled
+    g.add_argument("--expect", action="store_true", help=argparse.SUPPRESS)
     g.add_argument(
         "--status",
         action="store_true",
@@ -52,29 +53,6 @@ def configure_parser():
 
 success = True
 verbose = True
-
-
-def error(what, fatal=False, warn=False):
-    global success
-    print("ERROR:", what)
-    tb = format_exc()
-    if not tb.startswith("NoneType"):
-        print("-----")
-        print(tb.rstrip())
-        print("-----")
-    if fatal:
-        print("cannot proceed; exiting.")
-        sys.exit(-1)
-    if not warn:
-        success = False
-
-
-def tryop(op, *args, **kwargs):
-    try:
-        op(*args, **kwargs)
-        return True
-    except Exception:
-        return False
 
 
 PATCH_NAME = b"anaconda_anon_usage"
@@ -147,6 +125,9 @@ def _patch(args, pfile, patch_text, patch_name):
     text, status = _read(pfile, patch_text, patch_name)
     if verbose:
         print(f"| status: {status}")
+    if args.expect and status != "ENABLED":
+        print("exiting due to unexpected status")
+        sys.exit(-1)
     if status == "NOT PRESENT":
         return
     elif status == "NEEDS UPDATE":
