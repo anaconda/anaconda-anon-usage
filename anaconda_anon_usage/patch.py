@@ -31,33 +31,37 @@ def _new_check_prefix(prefix, json=False):
     Context._old_check_prefix(prefix, json)
 
 
-def _patch_check_prefix():
-    _debug("Applying anaconda_anon_usage cli.install patch")
-    from conda.cli import install as cli_install
+def _new_get_main_info_str(info_dict):
+    ua = info_dict["user_agent"]
+    if " aau/" in ua:
+        ua_redact = re.sub(r" ([a-z]/)([^ ]+)", r" \1.", ua)
+        info_dict["user_agent"] = ua_redact
+    return Context._old_get_main_info_str(info_dict)
 
+
+def _patch_check_prefix():
+    if hasattr(Context, "_old_check_prefix"):
+        return
+    _debug("Applying anaconda_anon_usage cli.install patch")
+
+    from conda.cli import install as cli_install
     Context._old_check_prefix = cli_install.check_prefix
     cli_install.check_prefix = _new_check_prefix
     context._aau_initialized = True
 
 
-def _patch_info():
+def _patch_conda_info():
+    if hasattr(Context, "_old_get_main_info_str"):
+        return
     _debug("Applying anaconda_anon_usage conda info patch")
+
     from conda.cli import main_info
-
-    main_info._old_get_main_info_str = main_info.get_main_info_str
-
-    def new_main_info_str(info_dict):
-        ua = info_dict["user_agent"]
-        if ' aau/' in ua:
-            ua_redact = re.sub(r" ([a-z]/)([^ ]+)", r" \1.", ua)
-            info_dict["user_agent"] = ua_redact
-        return main_info._old_get_main_info_str(info_dict)
-
-    main_info.get_main_info_str = new_main_info_str
+    Context._old_get_main_info_str = main_info.get_main_info_str
+    main_info.get_main_info_str = _new_get_main_info_str
 
 
 def main(plugin=False):
-    if hasattr(context, "_aau_initialized"):
+    if getattr(context, "_aau_initialized", None) is not None:
         _debug("anaconda_anon_usage already active")
         return False
     _debug("Applying anaconda_anon_usage context patch")
@@ -86,8 +90,8 @@ def main(plugin=False):
     if plugin:
         # The pre-command plugin avoids the circular import
         # of conda.cli.install, so we can apply the patch now
+        _patch_conda_info()
         _patch_check_prefix()
-        _patch_info()
     else:
         # We need to delay further. Schedule the patch for the
         # next time context.__init__ is called.
@@ -95,8 +99,8 @@ def main(plugin=False):
         _old__init__ = context.__init__
 
         def _new_init(*args, **kwargs):
+            _patch_conda_info()
             _patch_check_prefix()
-            _patch_info()
             context.__init__ = _old__init__
             _old__init__(*args, **kwargs)
 
