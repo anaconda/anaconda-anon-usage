@@ -48,8 +48,9 @@ def _patch_info():
 
     def new_main_info_str(info_dict):
         ua = info_dict["user_agent"]
-        ua_redact = re.sub(r" ([a-z]/)([^ ]+)", r" \1.", ua)
-        info_dict["user_agent"] = ua_redact
+        if ' aau/' in ua:
+            ua_redact = re.sub(r" ([a-z]/)([^ ]+)", r" \1.", ua)
+            info_dict["user_agent"] = ua_redact
         return main_info._old_get_main_info_str(info_dict)
 
     main_info.get_main_info_str = new_main_info_str
