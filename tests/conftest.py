@@ -34,7 +34,7 @@ def reset_patch(request):
         from conda.cli import install as cli_install
         from conda.cli import main_info
 
-        for k in ('___new_user_agent', '__user_agent', 'anaconda_anon_usage'):
+        for k in ("___new_user_agent", "__user_agent", "anaconda_anon_usage"):
             context._cache_.pop(k, None)
         context._aau_initialized = None
         if hasattr(Context, "anaconda_anon_usage"):

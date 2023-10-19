@@ -1,4 +1,4 @@
-from conda.base.context import Context, context
+from conda.base.context import context
 
 from anaconda_anon_usage import patch
 
@@ -27,8 +27,9 @@ def test_main_already_patched():
 def test_main_info():
     patch.main(plugin=True)
     tokens = dict(t.split("/", 1) for t in context.user_agent.split(" "))
-    tokens["c"] = tokens["e"] = tokens["s"] = '.'
+    tokens["c"] = tokens["e"] = tokens["s"] = "."
     from conda.cli import main_info
+
     info_dict = main_info.get_info_dict(False)
     assert info_dict["user_agent"] == context.user_agent
     info_str = main_info.get_main_info_str(info_dict)

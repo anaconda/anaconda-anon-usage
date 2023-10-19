@@ -45,6 +45,7 @@ def _patch_check_prefix():
     _debug("Applying anaconda_anon_usage cli.install patch")
 
     from conda.cli import install as cli_install
+
     Context._old_check_prefix = cli_install.check_prefix
     cli_install.check_prefix = _new_check_prefix
     context._aau_initialized = True
@@ -56,6 +57,7 @@ def _patch_conda_info():
     _debug("Applying anaconda_anon_usage conda info patch")
 
     from conda.cli import main_info
+
     Context._old_get_main_info_str = main_info.get_main_info_str
     main_info.get_main_info_str = _new_get_main_info_str
 
