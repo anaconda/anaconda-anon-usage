@@ -34,15 +34,13 @@ jobs:
       run: |
         source $CONDA/etc/profile.d/conda.sh
         conda install conda-build
-        conda build conda.recipe
+        conda build conda.recipe --no-test
         mv $CONDA/conda-bld .
-        # This ensures the noarch repodata.json is not clobbered
-        if [ -d conda-bld/win-64 ]; then rm -rf conda-bld/noarch; fi
     - name: Upload build artifacts
       uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3
       with:
         if-no-files-found: error
-        name: conda-bld
+        name: cb-${{ matrix.os }}
         path: conda-bld/
   test:
     needs: build
@@ -63,22 +61,32 @@ jobs:
       uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       with:
         fetch-depth: 0
-    - name: Download build artfiacts
+    - name: Download build artfiacts (Unix)
+      if: matrix.os != 'windows-latest'
       uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
       with:
-        name: conda-bld
-        path: ./conda-bld
+        name: cb-ubuntu-latest
+        path: conda-bld
+    - name: Download build artfiacts (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      with:
+        name: cb-windows-latest
+        path: conda-bld
     - name: Build test environments
       run: |
+        rm -rf $CONDA/conda-bld || :
         mv conda-bld $CONDA/
         source $CONDA/etc/profile.d/conda.sh
-        pkg=local::anaconda-anon-usage
-        conda install anaconda-client constructor conda-index $pkg
+        conda activate base
+        version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
+        pkg="anaconda-anon-usage=$version"
+        conda install -c local -vvv anaconda-client constructor $pkg
         if [[ "${{ matrix.cversion }}" == 23.7.* ]]; then
           mamba=conda-libmamba-solver
           echo "MAMBA=yes" >> "$GITHUB_ENV"
         fi
-        conda create -p ./testenv $pkg conda==${{ matrix.cversion }} $mamba --file tests/requirements.txt
+        conda create -p ./testenv -c local $pkg conda==${{ matrix.cversion }} $mamba --file tests/requirements.txt
         if [ -f ./testenv/Scripts/conda.exe ]; then \
            sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
         fi
