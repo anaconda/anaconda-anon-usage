@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 from os.path import basename, expanduser, isfile, join
@@ -9,6 +10,10 @@ nfailed = 0
 KEY = "anaconda_anon_usage"
 ENVKEY = "CONDA_ANACONDA_ANON_USAGE"
 DEBUG_PREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX")
+# Make sure we always try to fetch. Prior versions of this
+# test code used a fake channel to accomplish this, but the
+# fetch behavior of conda changed to frustrate that approach.
+os.environ["CONDA_LOCAL_REPODATA_TTL"] = "0"
 FAST_EXIT = "--fast" in sys.argv
 
 condarc = join(expanduser("~"), ".condarc")
@@ -78,16 +83,7 @@ for ctype in ("env", "cfg"):
         # Make sure to leave override-channels and the full channel URL in here.
         # This allows this command to run fully no matter what we do to channel_alias
         # and default_channels
-        cmd = [
-            "conda",
-            "install",
-            "-vvv",
-            "--override-channels",
-            "-c",
-            "https://repo.anaconda.com/pkgs/fakechannel",
-            "fakepackage",
-            "fakepackage",
-        ]
+        cmd = ["conda", "install", "-vvv", "fakepackage"]
         if envname:
             cmd.extend(["-n", envname])
         skip = False
@@ -97,8 +93,18 @@ for ctype in ("env", "cfg"):
             capture_output=True,
             text=True,
         )
-        user_agent = [v for v in proc.stderr.splitlines() if "User-Agent" in v]
-        user_agent = user_agent[0].split(":", 1)[-1].strip() if user_agent else ""
+        user_agent = ""
+        for v in proc.stderr.splitlines():
+            # Unfortunately conda has evolved how it logs request headers
+            # So this regular expression attempts to match multiple forms
+            # > User-Agent: conda/...
+            # .... {'User-Agent': 'conda/...', ...}
+            match = re.match(r'.*User-Agent(["\']?): *(["\']?)(.+)', v)
+            if match:
+                _, delim, user_agent = match.groups()
+                if delim and delim in user_agent:
+                    user_agent = user_agent.split(delim, 1)[0]
+                break
         if first:
             if user_agent:
                 print(user_agent)
