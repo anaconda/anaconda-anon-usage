@@ -81,7 +81,7 @@ jobs:
         conda activate base
         version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
         pkg="anaconda-anon-usage=$version"
-        conda install -c local -vvv anaconda-client constructor $pkg
+        conda install -c local anaconda-client constructor $pkg
         if [[ "${{ matrix.cversion }}" == 23.7.* ]]; then
           mamba=conda-libmamba-solver
           echo "MAMBA=yes" >> "$GITHUB_ENV"
