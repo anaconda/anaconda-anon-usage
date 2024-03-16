@@ -30,7 +30,7 @@ def test_main_info():
     tokens["c"] = tokens["e"] = tokens["s"] = "."
     from conda.cli import main_info
 
-    info_dict = main_info.get_info_dict(False)
+    info_dict = main_info.get_info_dict()
     assert info_dict["user_agent"] == context.user_agent
     info_str = main_info.get_main_info_str(info_dict)
     ua_strs = [
