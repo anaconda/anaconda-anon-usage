@@ -157,11 +157,16 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-    - name: Download package
+    - name: Download build artfiacts (Unix)
       uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
       with:
-        name: conda-bld
-        path: ./conda-bld
+        name: cb-ubuntu-latest
+        path: cb-unix
+    - name: Download build artfiacts (Windows)
+      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      with:
+        name: cb-windows-latest
+        path: cb-win
     - name: Upload to anaconda.org
       if: github.event_name == 'push'
       env:
@@ -171,4 +176,4 @@ jobs:
         source $CONDA/bin/activate
         conda install anaconda-client
         [[ "$GITHUB_REF" =~ ^refs/tags/ ]] || export LABEL="--label dev"
-        anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL conda-bld/*/*.tar.bz2 --force
+        anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL cb-win/*/*.tar.bz2 cb-unix/*/*.tar.bz2 --force
