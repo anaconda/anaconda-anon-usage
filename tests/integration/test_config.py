@@ -10,6 +10,7 @@ nfailed = 0
 KEY = "anaconda_anon_usage"
 ENVKEY = "CONDA_ANACONDA_ANON_USAGE"
 DEBUG_PREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX")
+DEBUG_TOKEN = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_TOKEN")
 # Make sure we always try to fetch. Prior versions of this
 # test code used a fake channel to accomplish this, but the
 # fetch behavior of conda changed to frustrate that approach.
@@ -41,6 +42,9 @@ all_modes = ["true", "false", "yes", "no", "on", "off", "default"]
 yes_modes = ("true", "yes", "on", "default")
 all_tokens = {"aau", "c", "s", "e"}
 aau_only = {"aau"}
+
+if DEBUG_TOKEN:
+    all_tokens.add('X-Auth')
 
 proc = subprocess.run(
     ["conda", "info", "--envs", "--json"],
@@ -93,38 +97,50 @@ for ctype in ("env", "cfg"):
             capture_output=True,
             text=True,
         )
-        user_agent = ""
+        found_headers = {}
+        target_headers = ('User-Agent',)
+        if DEBUG_TOKEN:
+            target_headers += ('X-Auth',)
         for v in proc.stderr.splitlines():
             # Unfortunately conda has evolved how it logs request headers
             # So this regular expression attempts to match multiple forms
             # > User-Agent: conda/...
             # .... {'User-Agent': 'conda/...', ...}
-            match = re.match(r'.*User-Agent(["\']?): *(["\']?)(.+)', v)
-            if match:
-                _, delim, user_agent = match.groups()
-                if delim and delim in user_agent:
-                    user_agent = user_agent.split(delim, 1)[0]
-                break
+            for hname in target_headers:
+                if hname not in found_headers:
+                    match = re.match(r'.*' + hname + '(["\']?): *(["\']?)(.+)', v)
+                    if match:
+                        _, delim, result = match.groups()
+                        if delim and delim in result:
+                            result = result.split(delim, 1)[0]
+                        found_headers[hname] = result
+                if len(found_headers) == len(target_headers):
+                    break
         if first:
-            if user_agent:
-                print(user_agent)
+            for hname, hval in found_headers.items():
+                print(f"{hname}: {hval}")
             print("")
             print("Configuration tests")
             print("-" * (maxlen + 19))
             first = False
+        user_agent = found_headers.get('User-Agent')
         if not user_agent or skip:
             print(f"{ctype} {mode:<7} | {envname:{maxlen}} | ERROR")
             for line in proc.stderr.splitlines():
                 if line.strip():
                     print("|", line)
-            if user_agent:
-                print("|", user_agent)
+            for hname in target_headers:
+                hval = found_headers.get(hname) or '<missing>'
+                print(f"| {hname}: {hval}")
             nfailed += 1
             if FAST_EXIT:
                 break
             continue
         tokens = dict(t.split("/", 1) for t in user_agent.split())
         tokens = {k: v for k, v in tokens.items() if k in all_tokens}
+        auth_token = found_headers.get('X-Auth')
+        if auth_token:
+            tokens['X-Auth'] = auth_token
         status = []
         expected = all_tokens if enabled else aau_only
         missing = expected - set(tokens)
@@ -163,7 +179,9 @@ for ctype in ("env", "cfg"):
                 if line.startswith(DEBUG_PREFIX):
                     print("|", line[4:])
         if status != "OK" or DEBUG_PREFIX:
-            print("|", user_agent)
+            for hname in target_headers:
+                hval = found_headers.get(hname) or '<missing>'
+                print(f"| {hname}: {hval}")
         if status != "OK" and FAST_EXIT:
             break
 print("-" * (maxlen + 19))

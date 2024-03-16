@@ -44,6 +44,8 @@ jobs:
     env:
       ANACONDA_ANON_USAGE_DEBUG: 1
       ANACONDA_ANON_USAGE_RAISE: 1
+      ANACONDA_ANON_USAGE_DEBUG_TOKEN: test-auth-token
+      PYTHONUNBUFFERED: 1
     defaults:
       run:
         # https://github.com/conda-incubator/setup-miniconda#use-a-default-shell

@@ -2,13 +2,15 @@
 # needed to deploy the additional anonmyous user data. It pulls
 # the token management functions themselves from the api module.
 
+import os
 import re
 import sys
 
 from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
+from conda.gateways.connection.session import CondaHttpAuth
 
-from .tokens import token_string
+from .tokens import token_string, auth_string
 from .utils import _debug
 
 
@@ -23,6 +25,14 @@ def _new_user_agent(ctx):
             result += " " + token
     except Exception:  # pragma: nocover
         pass
+    return result
+
+
+def _new_apply_basic_auth(request):
+    result = CondaHttpAuth._old_apply_basic_auth(request)
+    auth_token = auth_string(request.url, context.anaconda_anon_usage)
+    if auth_token and 'X-Auth' not in request.headers:
+        request.headers["X-Auth"] = auth_token
     return result
 
 
@@ -84,6 +94,12 @@ def main(plugin=False):
     # conda.base.context.checked_prefix
     # Saves the prefix used in a conda install command
     Context.checked_prefix = None
+
+    # conda.gateways.connection.session.CondaHttpAuth
+    # Adds the X-Anaconda-Token header to all conda requests to anaconda.* domains
+    CondaHttpAuth._old_apply_basic_auth = CondaHttpAuth._apply_basic_auth
+    CondaHttpAuth._apply_basic_auth = staticmethod(_new_apply_basic_auth)
+    CondaHttpAuth._cloud_token = None
 
     # conda.base.context._aau_initialized
     # This helps us determine if the patching is comlpete
