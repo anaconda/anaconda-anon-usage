@@ -16,13 +16,15 @@ setup(
     packages=["anaconda_anon_usage"],
     install_requires=["conda"],
     keywords=["anaconda-anon-usage"],
-    entry_points={
-        "conda": [
-            "anaconda-anon-usage-plugin = anaconda_anon_usage.plugin",
-        ],
-    }
-    if os.environ.get("NEED_SCRIPTS") != "yes"
-    else {},
+    entry_points=(
+        {
+            "conda": [
+                "anaconda-anon-usage-plugin = anaconda_anon_usage.plugin",
+            ],
+        }
+        if os.environ.get("NEED_SCRIPTS") != "yes"
+        else {}
+    ),
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
