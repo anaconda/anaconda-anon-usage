@@ -63,13 +63,13 @@ jobs:
         fetch-depth: 0
     - name: Download build artfiacts (Unix)
       if: matrix.os != 'windows-latest'
-      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4
       with:
         name: cb-ubuntu-latest
         path: conda-bld
     - name: Download build artfiacts (Windows)
       if: matrix.os == 'windows-latest'
-      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4
       with:
         name: cb-windows-latest
         path: conda-bld
@@ -158,12 +158,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download build artfiacts (Unix)
-      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4
       with:
         name: cb-ubuntu-latest
         path: cb-unix
     - name: Download build artfiacts (Windows)
-      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4
       with:
         name: cb-windows-latest
         path: cb-win
