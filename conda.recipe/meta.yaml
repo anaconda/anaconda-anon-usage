@@ -42,9 +42,11 @@ test:
     - tests
   commands:
     - export ANACONDA_ANON_USAGE_DEBUG=1  # [unix]
+    - export ANACONDA_ANON_USAGE_DEBUG_TOKEN=test-auth-token  # [unix]
     - export PYTHONUNBUFFERED=1  # [unix]
     - set ANACONDA_ANON_USAGE_DEBUG=1  # [win]
-    - set PYTHONUNBUFFERED=1 # [win]
+    - set ANACONDA_ANON_USAGE_DEBUG_TOKEN=test-auth-token  # [win]
+    - set PYTHONUNBUFFERED=1  # [win]
     - conda create -n testchild1 --yes
     - conda create -n testchild2 --yes
     - conda info
