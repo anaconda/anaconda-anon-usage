@@ -5,6 +5,8 @@ import subprocess
 import sys
 from os.path import basename, expanduser, isfile, join
 
+from conda import __version__ as c_version
+
 nfailed = 0
 
 KEY = "anaconda_anon_usage"
@@ -44,7 +46,10 @@ all_tokens = {"aau", "c", "s", "e"}
 aau_only = {"aau"}
 
 if DEBUG_TOKEN:
-    all_tokens.add("X-Auth")
+    if tuple(map(int, c_version.split(".")[:2])) == (4, 14):
+        DEBUG_TOKEN = None
+    else:
+        all_tokens.add("X-Auth")
 
 proc = subprocess.run(
     ["conda", "info", "--envs", "--json"],
