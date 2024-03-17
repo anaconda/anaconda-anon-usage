@@ -128,7 +128,10 @@ def auth_string(url, enabled=True):
     all_tokens = ac.read_binstar_tokens()
     debug_token = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_TOKEN")
     if debug_token:
-        all_tokens["https://repo.anaconda.com/"] = debug_token
+        all_tokens = {
+            "https://anaconda.cloud/": debug_token,
+            "https://conda.anaconda.org/": debug_token + -"wrong",
+        }
     for t_url, t_val in all_tokens.items():
         match = re.match(
             r"^https?://(?:[^/]*[.])?anaconda[.](cloud|com|org)(?:/.*)?$", t_url
