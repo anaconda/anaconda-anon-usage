@@ -2,7 +2,6 @@
 # needed to deploy the additional anonmyous user data. It pulls
 # the token management functions themselves from the api module.
 
-import os
 import re
 import sys
 
@@ -10,7 +9,7 @@ from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 from conda.gateways.connection.session import CondaHttpAuth
 
-from .tokens import token_string, auth_string
+from .tokens import auth_string, token_string
 from .utils import _debug
 
 
@@ -31,7 +30,7 @@ def _new_user_agent(ctx):
 def _new_apply_basic_auth(request):
     result = CondaHttpAuth._old_apply_basic_auth(request)
     auth_token = auth_string(request.url, context.anaconda_anon_usage)
-    if auth_token and 'X-Auth' not in request.headers:
+    if auth_token and "X-Auth" not in request.headers:
         request.headers["X-Auth"] = auth_token
     return result
 

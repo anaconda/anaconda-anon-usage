@@ -113,25 +113,27 @@ def auth_string(url, enabled=True):
     if not enabled:
         _debug("auth string disabled by config")
         return
-    if 'anaconda.com' not in url:
+    if "anaconda.com" not in url:
         _debug("auth string only sent to anaconda.com")
         return
-    if not re.match(r'^https?://(?:[^/]*[.])?anaconda[.]com(?:/.*)?$', url):
+    if not re.match(r"^https?://(?:[^/]*[.])?anaconda[.]com(?:/.*)?$", url):
         _debug("auth string only sent to anaconda.com")
         return
     if _token_value is not None:
         return _token_value
-    candidates = [(4, '')]
-    priorities = {'com': 1, 'cloud': 2, 'org': 3}
+    candidates = [(4, "")]
+    priorities = {"com": 1, "cloud": 2, "org": 3}
     from conda.gateways import anaconda_client as ac
+
     all_tokens = ac.read_binstar_tokens()
-    debug_token = os.environ.get('ANACONDA_ANON_USAGE_DEBUG_TOKEN')
+    debug_token = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_TOKEN")
     if debug_token:
-        all_tokens['https://repo.anaconda.com/'] = debug_token
+        all_tokens["https://repo.anaconda.com/"] = debug_token
     for t_url, t_val in all_tokens.items():
-        match = re.match(r'^https?://(?:[^/]*[.])?anaconda[.](cloud|com|org)(?:/.*)?$', t_url)
+        match = re.match(
+            r"^https?://(?:[^/]*[.])?anaconda[.](cloud|com|org)(?:/.*)?$", t_url
+        )
         if match:
-            print(match.groups())
             candidates.append((priorities.get(match.groups()[0], 5), t_val))
     _token_value = min(candidates)[1]
     return _token_value
