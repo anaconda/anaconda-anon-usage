@@ -5,7 +5,7 @@ default_stages: [commit]
 exclude: versioneer.py|anaconda_anon_usage/_version.py
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0
     hooks:
       - id: check-added-large-files
       - id: check-ast
