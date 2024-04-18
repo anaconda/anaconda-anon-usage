@@ -39,6 +39,18 @@ def _new_get_main_info_str(info_dict):
     return Context._old_get_main_info_str(info_dict)
 
 
+def _new_install(args, parser, command="install"):
+    Context.packages_from_cli = args.packages
+    return Context._old_install(args, parser, command)
+
+
+def _patch_install():
+    from conda.cli import install as cli_install
+
+    Context._old_install = cli_install.install
+    cli_install.install = _new_install
+
+
 def _patch_check_prefix():
     if hasattr(Context, "_old_check_prefix"):
         return
@@ -85,6 +97,10 @@ def main(plugin=False):
     # Saves the prefix used in a conda install command
     Context.checked_prefix = None
 
+    # conda.cli.install.install
+    # Saves the list of packages (specs) specified on the command line
+    Context.packages_from_cli = None
+
     # conda.base.context._aau_initialized
     # This helps us determine if the patching is comlpete
     context._aau_initialized = False
@@ -94,6 +110,7 @@ def main(plugin=False):
         # of conda.cli.install, so we can apply the patch now
         _patch_conda_info()
         _patch_check_prefix()
+        _patch_install()
     else:
         # We need to delay further. Schedule the patch for the
         # next time context.__init__ is called.

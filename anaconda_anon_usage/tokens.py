@@ -11,7 +11,7 @@ from os.path import expanduser, join
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
-Tokens = namedtuple("Tokens", ("version", "client", "session", "environment"))
+Tokens = namedtuple("Tokens", ("version", "client", "session", "environment", "packages"))
 CONFIG_DIR = expanduser("~/.conda")
 
 
@@ -59,13 +59,28 @@ def environment_token(prefix=None):
 
 
 @cached
+def packages_token(seperator=';'):
+    """
+    Return the packages token, a list of the packages (specs)
+    specified on the command line separated by the provided
+    seperator, default is a semi-colon.
+    """
+    from conda.base.context import context
+
+    packages = getattr(context, "packages_from_cli", None)
+    if packages is None:
+        return ''
+    return seperator.join(packages)
+
+
+@cached
 def all_tokens(prefix=None):
     """
     Returns the token set, in the form of a Tokens namedtuple.
     Fields: version, client, session, environment
     """
     return Tokens(
-        version_token(), client_token(), session_token(), environment_token(prefix)
+        version_token(), client_token(), session_token(), environment_token(prefix), packages_token(),
     )
 
 
@@ -84,6 +99,8 @@ def token_string(prefix=None, enabled=True):
             parts.append("s/" + values.session)
         if values.environment:
             parts.append("e/" + values.environment)
+        if values.packages:
+            parts.append("packages/" + values.packages)
     else:
         _debug("anaconda_anon_usage disabled by config")
     result = " ".join(parts)
