@@ -70,6 +70,7 @@ jobs:
         miniconda-version: 'latest'
         auto-activate-base: true
         activate-environment: ""
+        conda-solver: classic
     - name: Build test environments
       run: |
         rm -rf $CONDA/conda-bld || :
