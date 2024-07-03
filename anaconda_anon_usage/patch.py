@@ -5,25 +5,32 @@
 import re
 import sys
 
-from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
-from .tokens import token_string
-from .utils import _debug
+from .tokens import CLIENT_TOKEN, is_bootstrapped, token_string
+from .utils import cached, _debug, _read_token
 
 
-def _new_user_agent(ctx):
-    result = ctx._old_user_agent
-    prefix = (
-        getattr(Context, "checked_prefix", None) or context.target_prefix or sys.prefix
-    )
+@cached
+def _append_tokens(prefix, user_agent, was_already_bootstrapped):
     try:
         token = token_string(prefix, context.anaconda_anon_usage)
         if token:
-            result += " " + token
+            user_agent += " " + token
+            # only add the bootstrap token if it was not already bootstrapped
+            if not was_already_bootstrapped:
+                user_agent += f" b/{_read_token(CLIENT_TOKEN)}"
+
     except Exception:  # pragma: nocover
         pass
-    return result
+    return user_agent
+
+
+def _new_user_agent(ctx):
+    prefix = (
+        getattr(Context, "checked_prefix", None) or context.target_prefix or sys.prefix
+    )
+    return _append_tokens(prefix, ctx._old_user_agent, is_bootstrapped())
 
 
 def _new_check_prefix(prefix, json=False):
@@ -73,7 +80,7 @@ def main(plugin=False):
     Context._old_user_agent = Context.user_agent
     # Using a different name ensures that this is stored
     # in the cache in a different place than the original
-    Context.user_agent = memoizedproperty(_new_user_agent)
+    Context.user_agent = property(_new_user_agent)
 
     # conda.base.context.Context
     # Adds anaconda_anon_usage as a managed string config parameter

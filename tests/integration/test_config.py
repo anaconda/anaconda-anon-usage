@@ -39,7 +39,7 @@ def _config(value):
 
 all_modes = ["true", "false", "yes", "no", "on", "off", "default"]
 yes_modes = ("true", "yes", "on", "default")
-all_tokens = {"aau", "c", "s", "e"}
+all_tokens = {"aau", "b", "c", "s", "e"}
 aau_only = {"aau"}
 
 proc = subprocess.run(

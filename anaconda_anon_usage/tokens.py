@@ -6,13 +6,14 @@
 
 import sys
 from collections import namedtuple
-from os.path import expanduser, join
+from os.path import exists, expanduser, join
 
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
 Tokens = namedtuple("Tokens", ("version", "client", "session", "environment"))
 CONFIG_DIR = expanduser("~/.conda")
+CLIENT_TOKEN = join(CONFIG_DIR, "aau_token")
 
 
 @cached
@@ -24,6 +25,13 @@ def version_token():
     return __version__
 
 
+def is_bootstrapped():
+    """
+    Returns True if the client token has already been created.
+    """
+    return exists(CLIENT_TOKEN)
+
+
 @cached
 def client_token():
     """
@@ -31,8 +39,7 @@ def client_token():
     been generated, an attempt is made to do so. If
     that fails, an empty string is returned.
     """
-    fpath = join(CONFIG_DIR, "aau_token")
-    return _saved_token(fpath, "client")
+    return _saved_token(CLIENT_TOKEN, "client")
 
 
 @cached
@@ -55,7 +62,7 @@ def environment_token(prefix=None):
     if prefix is None:
         prefix = sys.prefix
     fpath = join(prefix, "etc", "aau_token")
-    return _saved_token(fpath, "environment", prefix)
+    return _saved_token(fpath, "environment", must_exist=prefix)
 
 
 @cached

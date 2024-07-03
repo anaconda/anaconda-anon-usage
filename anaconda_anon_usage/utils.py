@@ -123,6 +123,15 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
         return WRITE_FAIL
 
 
+def _read_token(fpath):
+    try:
+        # Use just the first line of the file, if it exists
+        with open(fpath) as fp:
+            return "".join(fp.read().splitlines()[:1])
+    except Exception as exc:
+        _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
+
+
 def _saved_token(fpath, what, must_exist=None):
     """
     Implements the saved token functionality. If the specified
@@ -132,28 +141,32 @@ def _saved_token(fpath, what, must_exist=None):
     """
     global DEFERRED
     client_token = ""
-    _debug("%s token path: %s", what.capitalize(), fpath)
+    fexists = exists(fpath)
+    _debug("%s token path: %s (exists: %s)", what.capitalize(), fpath, fexists)
+
     if what[0] in READ_CHAOS:
         _debug("Pretending %s token is not present", what)
-    elif exists(fpath):
-        try:
-            # Use just the first line of the file, if it exists
-            with open(fpath) as fp:
-                client_token = "".join(fp.read().splitlines()[:1])
-            _debug("Retrieved %s token: %s", what, client_token)
-        except Exception as exc:
-            _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
+    elif fexists:
+        client_token = _read_token(fpath) or ""
+        _debug("Retrieved %s token: %s", what, client_token)
+
     if len(client_token) < 22:
         if len(client_token) > 0:
             _debug("Generating longer token")
         client_token = _random_token(what)
         status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
+
         if status == WRITE_FAIL:
             _debug("Returning blank %s token", what)
             return ""
+
         elif status == WRITE_DEFER:
             # If the environment has not yet been created we need
             # to defer the token write until later.
             _debug("Deferring token write")
             DEFERRED.append((must_exist, fpath, client_token))
+
+        elif status == WRITE_SUCCESS:
+            _debug("Successfully written token")
+
     return client_token
