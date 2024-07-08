@@ -1,11 +1,12 @@
 from conda.base.context import context
 
-from anaconda_anon_usage import patch
+from anaconda_anon_usage import patch, utils
 
 
 def test_new_user_agent():
     patch.main(plugin=True)
     user_agent = context.user_agent
+    utils._final_attempt()
     assert user_agent is not None
     for term in ["conda/", "aau/", "e/", "c/", "s/", "b/"]:
         assert term in user_agent
