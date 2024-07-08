@@ -8,7 +8,7 @@ import sys
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
 from .tokens import CLIENT_TOKEN, is_bootstrapped, token_string
-from .utils import cached, _debug, _read_token
+from .utils import _debug, _read_token, cached
 
 
 @cached
