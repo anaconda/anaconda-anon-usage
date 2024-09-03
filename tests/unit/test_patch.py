@@ -1,6 +1,6 @@
 from conda.base.context import context
 
-from anaconda_anon_usage import patch, utils
+from anaconda_anon_usage import patch, tokens, utils
 
 
 def test_new_user_agent():
@@ -15,7 +15,7 @@ def test_new_user_agent():
 
 
 def test_user_agent_no_token(monkeypatch):
-    monkeypatch.setattr(patch, "token_string", lambda prefix: "")
+    monkeypatch.setattr(tokens, "token_string", lambda prefix: "")
     patch.main(plugin=True)
     assert "conda/" in context.user_agent
     assert "aau/" not in context.user_agent

@@ -4,22 +4,23 @@
 
 import re
 import sys
+from os.path import exists
 
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
-from .tokens import CLIENT_TOKEN, is_bootstrapped, token_string
+from . import tokens
 from .utils import _debug, _read_token, cached
 
 
 @cached
-def _append_tokens(prefix, user_agent, was_already_bootstrapped):
+def _append_tokens(prefix, user_agent, bootstrapping=False):
     try:
-        token = token_string(prefix, context.anaconda_anon_usage)
+        token = tokens.token_string(prefix, context.anaconda_anon_usage)
         if token:
             user_agent += " " + token
             # only add the bootstrap token if it was not already bootstrapped
-            if not was_already_bootstrapped:
-                user_agent += f" b/{_read_token(CLIENT_TOKEN)}"
+            if bootstrapping:
+                user_agent += f" b/{_read_token(tokens.CLIENT_TOKEN)}"
 
     except Exception:  # pragma: nocover
         pass
@@ -30,7 +31,7 @@ def _new_user_agent(ctx):
     prefix = (
         getattr(Context, "checked_prefix", None) or context.target_prefix or sys.prefix
     )
-    return _append_tokens(prefix, ctx._old_user_agent, is_bootstrapped())
+    return _append_tokens(prefix, ctx._old_user_agent, bootstrapping=not exists(tokens.CLIENT_TOKEN))
 
 
 def _new_check_prefix(prefix, json=False):

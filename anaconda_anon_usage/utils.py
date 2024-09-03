@@ -124,6 +124,9 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
 
 
 def _read_token(fpath):
+    """
+    Read the token from the given location and broadly handle errors.
+    """
     try:
         # Use just the first line of the file, if it exists
         with open(fpath) as fp:

@@ -6,7 +6,7 @@
 
 import sys
 from collections import namedtuple
-from os.path import exists, expanduser, join
+from os.path import expanduser, join
 
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
@@ -23,13 +23,6 @@ def version_token():
     version string itself.
     """
     return __version__
-
-
-def is_bootstrapped():
-    """
-    Returns True if the client token has already been created.
-    """
-    return exists(CLIENT_TOKEN)
 
 
 @cached
