@@ -34,7 +34,7 @@ jobs:
         conda build conda.recipe --no-test
         mv $CONDA/conda-bld .
     - name: Upload build artifacts
-      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4
+      uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4
       with:
         if-no-files-found: error
         name: conda-bld
@@ -53,7 +53,7 @@ jobs:
       matrix:
         # macos-13 defaults to osx-64, macos-14 defaults to osx-arm64
         os: [ubuntu-latest, macos-13, macos-14, windows-latest]
-        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.3.1', '23.7.3', '23.10.0', '24.1.2', '24.3.0']
+        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.3.1', '23.7.3', '23.10.0', '24.1.2', '24.3.0', '24.5.0', '24.7.1']
     runs-on: ${{ matrix.os }}
     steps:
     - name: Retrieve the source code
@@ -61,7 +61,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Download build artfiacts
-      uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e # v4
+      uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
       with:
         name: conda-bld
         path: conda-bld
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download build artfiacts
-      uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e # v4
+      uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
       with:
         name: conda-bld
         path: conda-bld
