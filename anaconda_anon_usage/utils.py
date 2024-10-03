@@ -124,7 +124,9 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
         return WRITE_FAIL
 
 
-def _deferred_exists(fpath: str, what: str, deferred_writes: List = DEFERRED) -> Optional[str]:
+def _deferred_exists(
+    fpath: str, what: str, deferred_writes: List = DEFERRED
+) -> Optional[str]:
     """
     Check if the deferred token write exists in the DEFERRED write array.
     If the path must already exist, this helper function determines if the token will be written in the future.
