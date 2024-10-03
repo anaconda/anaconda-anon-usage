@@ -137,8 +137,8 @@ def _deferred_exists(fpath: str, what: str, deferred_writes: List = DEFERRED) ->
     Returns:
         The token if it exists, otherwise None.
     """
-    for _, fp, token, what in deferred_writes:
-        if fp == fpath and what == what:
+    for _, fp, token, w in deferred_writes:
+        if fp == fpath and w == what:
             return token
 
 
