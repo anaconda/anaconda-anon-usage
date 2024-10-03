@@ -129,7 +129,8 @@ def _deferred_exists(
 ) -> Optional[str]:
     """
     Check if the deferred token write exists in the DEFERRED write array.
-    If the path must already exist, this helper function determines if the token will be written in the future.
+    If the path must already exist, this helper function determines
+    if the token will be written in the future.
 
     Args:
         fpath: The file path to check for.
