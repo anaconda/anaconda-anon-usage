@@ -5,6 +5,7 @@ import os
 import sys
 from os.path import dirname, exists
 from threading import RLock
+from typing import List, Optional
 
 DPREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX") or ""
 DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG")) or DPREFIX
@@ -85,7 +86,7 @@ def _final_attempt():
     environment directory was not yet available.
     """
     global DEFERRED
-    for must_exist, fpath, token in DEFERRED:
+    for must_exist, fpath, token, what in DEFERRED:
         _write_attempt(must_exist, fpath, token)
 
 
@@ -123,6 +124,24 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
         return WRITE_FAIL
 
 
+def _deferred_exists(fpath: str, what: str, deferred_writes: List = DEFERRED) -> Optional[str]:
+    """
+    Check if the deferred token write exists in the DEFERRED write array.
+    If the path must already exist, this helper function determines if the token will be written in the future.
+
+    Args:
+        fpath: The file path to check for.
+        what: The type of token to check for.
+        deferred_tokens: The list of deferred tokens to check.
+
+    Returns:
+        The token if it exists, otherwise None.
+    """
+    for _, fp, token, what in deferred_writes:
+        if fp == fpath and what == what:
+            return token
+
+
 def _saved_token(fpath, what, must_exist=None):
     """
     Implements the saved token functionality. If the specified
@@ -131,6 +150,13 @@ def _saved_token(fpath, what, must_exist=None):
     this location. If that fails, return an empty string.
     """
     global DEFERRED
+
+    # If a deferred token exits for the given fpath, return it instead of generating a new one.
+    deferred_token = _deferred_exists(fpath, what)
+    if deferred_token:
+        _debug("Returning deferred %s token: %s", what, deferred_token)
+        return deferred_token
+
     client_token = ""
     _debug("%s token path: %s", what.capitalize(), fpath)
     if what[0] in READ_CHAOS:
@@ -155,5 +181,5 @@ def _saved_token(fpath, what, must_exist=None):
             # If the environment has not yet been created we need
             # to defer the token write until later.
             _debug("Deferring token write")
-            DEFERRED.append((must_exist, fpath, client_token))
+            DEFERRED.append((must_exist, fpath, client_token, what))
     return client_token

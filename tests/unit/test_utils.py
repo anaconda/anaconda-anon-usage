@@ -87,3 +87,12 @@ def test_saved_token_existing_long(tmpdir):
     assert exists(token_path)
     assert token_saved == longer_token
     assert len(token_saved) == 23
+
+
+def test_return_deferred_token(tmpdir):
+    """Tests that utils_saved_token will return the token if it is in a deferred write state instead of creating a new one."""
+
+    token_path = tmpdir.join("aau_token")
+    token1 = utils._saved_token(token_path, "test", token_path)
+    token2 = utils._saved_token(token_path, "test", token_path)
+    assert token1 == token2
