@@ -7,20 +7,21 @@ from conda.base.context import Context, context
 from anaconda_anon_usage import tokens, utils
 
 
-@pytest.fixture
-def aau_token_path():
-    return join(tokens.CONFIG_DIR, "aau_token")
+def _remove():
+    try:
+        remove(tokens.CLIENT_TOKEN)
+    except FileNotFoundError:
+        pass
 
 
 @pytest.fixture(autouse=True)
-def token_cleanup(request, aau_token_path):
-    def _remove():
-        try:
-            remove(aau_token_path)
-        except FileNotFoundError:
-            pass
-
+def token_cleanup(request):
     request.addfinalizer(_remove)
+
+
+@pytest.fixture(autouse=True)
+def test_config_dir(monkeypatch):
+    monkeypatch.setattr(tokens, "CLIENT_TOKEN", join(tokens.CONFIG_DIR, "aau_token_test"))
 
 
 @pytest.fixture(autouse=True)

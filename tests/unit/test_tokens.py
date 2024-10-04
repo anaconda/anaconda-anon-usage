@@ -3,10 +3,10 @@ from os.path import exists
 from anaconda_anon_usage import tokens, utils
 
 
-def test_client_token(aau_token_path):
-    assert not exists(aau_token_path)
+def test_client_token():
+    assert not exists(tokens.CLIENT_TOKEN)
     assert tokens.client_token() != ""
-    assert exists(aau_token_path)
+    assert exists(tokens.CLIENT_TOKEN)
 
 
 def test_environment_token_without_monkey_patching():
