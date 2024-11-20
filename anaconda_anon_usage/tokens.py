@@ -130,7 +130,7 @@ def auth_string(url, enabled=True):
     if debug_token:
         all_tokens = {
             "https://anaconda.cloud/": debug_token,
-            "https://conda.anaconda.org/": debug_token + -"wrong",
+            "https://conda.anaconda.org/": debug_token + "-wrong",
         }
     for t_url, t_val in all_tokens.items():
         match = re.match(

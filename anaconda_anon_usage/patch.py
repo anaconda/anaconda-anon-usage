@@ -35,9 +35,10 @@ def _new_user_agent(ctx):
 def _new_apply_basic_auth(request):
     assert CondaHttpAuth is not None
     result = CondaHttpAuth._old_apply_basic_auth(request)
-    auth_token = auth_string(request.url, context.anaconda_anon_usage)
-    if auth_token and "X-Auth" not in request.headers:
-        request.headers["X-Auth"] = auth_token
+    if "X-Auth" not in request.headers:
+        auth_token = auth_string(request.url, context.anaconda_anon_usage)
+        if auth_token:
+            request.headers["X-Auth"] = auth_token
     return result
 
 
