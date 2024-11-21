@@ -48,8 +48,8 @@ proc = subprocess.run(
     capture_output=True,
     text=True,
 )
-pfx_s = join(sys.prefix, "envs") + os.sep
 pdata = json.loads(proc.stdout)
+pfx_s = join(sys.prefix, "envs") + os.sep
 envs = [e for e in pdata["envs"] if e == sys.prefix or e.startswith(pfx_s)]
 envs = {("base" if e == sys.prefix else basename(e)): e for e in envs}
 for env in envs:
