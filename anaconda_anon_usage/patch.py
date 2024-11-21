@@ -8,7 +8,13 @@ import sys
 from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
-from .tokens import token_string
+try:
+    # in conda 4.14 this produces a circular import
+    from conda.gateways.connection.session import CondaHttpAuth
+except ImportError:
+    CondaHttpAuth = None
+
+from .tokens import auth_string, token_string
 from .utils import _debug
 
 
@@ -23,6 +29,16 @@ def _new_user_agent(ctx):
             result += " " + token
     except Exception:  # pragma: nocover
         pass
+    return result
+
+
+def _new_apply_basic_auth(request):
+    assert CondaHttpAuth is not None
+    result = CondaHttpAuth._old_apply_basic_auth(request)
+    if "X-Auth" not in request.headers:
+        auth_token = auth_string(request.url, context.anaconda_anon_usage)
+        if auth_token:
+            request.headers["X-Auth"] = auth_token
     return result
 
 
@@ -63,6 +79,8 @@ def _patch_conda_info():
 
 
 def main(plugin=False):
+    global _CondaHttpAuth
+
     if getattr(context, "_aau_initialized", None) is not None:
         _debug("anaconda_anon_usage already active")
         return False
@@ -84,6 +102,12 @@ def main(plugin=False):
     # conda.base.context.checked_prefix
     # Saves the prefix used in a conda install command
     Context.checked_prefix = None
+
+    # conda.gateways.connection.session.CondaHttpAuth
+    # Adds the X-Anaconda-Token header to all conda requests to anaconda.* domains
+    if CondaHttpAuth is not None:
+        CondaHttpAuth._old_apply_basic_auth = CondaHttpAuth._apply_basic_auth
+        CondaHttpAuth._apply_basic_auth = staticmethod(_new_apply_basic_auth)
 
     # conda.base.context._aau_initialized
     # This helps us determine if the patching is comlpete

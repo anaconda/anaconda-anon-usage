@@ -39,8 +39,9 @@ test:
   source_files:
     - tests
   commands:
-    - export ANACONDA_ANON_USAGE_DEBUG=1
-    - export PYTHONUNBUFFERED=1
+    - export ANACONDA_ANON_USAGE_DEBUG=1  # [unix]
+    - export ANACONDA_ANON_USAGE_DEBUG_TOKEN=test-auth-token  # [unix]
+    - export PYTHONUNBUFFERED=1  # [unix]
     - conda create -n testchild1 --yes
     - conda create -n testchild2 --yes
     - conda info
