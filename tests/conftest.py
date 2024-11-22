@@ -2,7 +2,9 @@ from os import remove
 from os.path import join
 
 import pytest
+import tempfile
 from conda.base.context import Context, context
+from conda.base import constants as c_constants
 
 from anaconda_anon_usage import tokens, utils
 
@@ -10,6 +12,17 @@ from anaconda_anon_usage import tokens, utils
 @pytest.fixture
 def aau_token_path():
     return join(tokens.CONFIG_DIR, "aau_token")
+
+
+@pytest.fixture
+def sys_token_path():
+    with tempfile.TemporaryDirectory() as tname:
+        tname = tname.replace('\\', '/')
+        o_path = c_constants.SEARCH_PATH
+        n_path = ('/tmp/fake/condarc.d/', tname + '/.condarc', tname + '/condarc', tname + '/condarc.d/')
+        c_constants.SEARCH_PATH = n_path + o_path
+        yield tname + '/aau_token'
+        c_constants.SEARCH_PATH = o_path
 
 
 @pytest.fixture(autouse=True)

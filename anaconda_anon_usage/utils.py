@@ -35,6 +35,10 @@ WRITE_SUCCESS = 0
 WRITE_DEFER = 1
 WRITE_FAIL = 2
 
+# Length of the randomly generated token. There is 6 bits of
+# randomness in each character.
+TOKEN_LENGTH = 22
+
 
 def cached(func):
     def call_if_needed(*args, **kwargs):
@@ -72,9 +76,14 @@ def _debug(s, *args, error=False):
         print((DPREFIX + s) % args, file=sys.stderr)
 
 
-def _random_token(what="random"):
-    data = os.urandom(16)
-    result = base64.urlsafe_b64encode(data).strip(b"=").decode("ascii")
+def _random_token(what="random", seed=None):
+    # The seed, if supplied, reduces the random token length
+    seed = seed or ""
+    tlen = TOKEN_LENGTH - len(seed)
+    # base64 encoding captures 6 bits per character.
+    # Generate enough random bytes to ensure all charaaters are random
+    data = os.urandom((tlen * 6 - 1) // 8 + 1)
+    result = seed + base64.urlsafe_b64encode(data).decode("ascii")[:tlen]
     _debug("Generated %s token: %s", what, result)
     return result
 
@@ -145,7 +154,7 @@ def _deferred_exists(
             return token
 
 
-def _saved_token(fpath, what, must_exist=None):
+def _saved_token(fpath, what, must_exist=None, seed=None, read_only=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
@@ -172,10 +181,16 @@ def _saved_token(fpath, what, must_exist=None):
             _debug("Retrieved %s token: %s", what, client_token)
         except Exception as exc:
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
+    if not client_token and read_only:
+        _debug("Read-only %s token does not exist", what)
+        return client_token
+    if client_token and seed and not client_token.startswith(seed):
+        _debug("Re-inserting seed into %s token", what)
+        client_token = ""
     if len(client_token) < 22:
         if len(client_token) > 0:
-            _debug("Generating longer token")
-        client_token = _random_token(what)
+            _debug("Generating longer %s token", what)
+        client_token = _random_token(what, seed)
         status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
         if status == WRITE_FAIL:
             _debug("Returning blank %s token", what)
@@ -183,6 +198,6 @@ def _saved_token(fpath, what, must_exist=None):
         elif status == WRITE_DEFER:
             # If the environment has not yet been created we need
             # to defer the token write until later.
-            _debug("Deferring token write")
+            _debug("Deferring %s token write", what)
             DEFERRED.append((must_exist, fpath, client_token, what))
     return client_token

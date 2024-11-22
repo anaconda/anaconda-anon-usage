@@ -9,6 +9,26 @@ def test_client_token(aau_token_path):
     assert exists(aau_token_path)
 
 
+def test_client_token_with_system_token(aau_token_path, sys_token_path):
+    assert not exists(aau_token_path)
+    with open(sys_token_path, "w") as fp:
+        fp.write("ABCDEF")
+    token = tokens.client_token()
+    assert token.startswith("ABCDEF")
+    assert exists(aau_token_path)
+
+
+def test_system_token_overrides_client_token(aau_token_path, sys_token_path):
+    assert not exists(aau_token_path)
+    with open(aau_token_path, "w") as fp:
+        fp.write("01234567890123456789001234567890")
+    with open(sys_token_path, "w") as fp:
+        fp.write("ABCDEF")
+    token = tokens.client_token()
+    assert token.startswith("ABCDEF")
+    assert exists(aau_token_path)
+
+
 def test_environment_token_without_monkey_patching():
     assert tokens.environment_token() is not None
 
@@ -36,8 +56,10 @@ def test_token_string_disabled():
 
 
 def test_token_string_no_client_token(monkeypatch):
+    def _mock_saved_token(*args, **kwargs):
+        return ""
     monkeypatch.setattr(tokens, "environment_token", lambda prefix: "env_token")
-    monkeypatch.setattr(tokens, "_saved_token", lambda fpath, what: "")
+    monkeypatch.setattr(tokens, "_saved_token", _mock_saved_token)
 
     token_string = tokens.token_string()
     assert "c/" not in token_string

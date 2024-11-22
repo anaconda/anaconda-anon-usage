@@ -6,7 +6,8 @@
 
 import sys
 from collections import namedtuple
-from os.path import expanduser, join
+from os.path import expanduser, abspath, join, exists, dirname
+from conda.base import constants as c_constants
 
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
@@ -25,6 +26,37 @@ def version_token():
 
 
 @cached
+def system_token():
+    """
+    The system token is a token installed into a read-only system
+    location, presumably by MDM software. If present, it is used
+    as an enforced prefix to the client token.
+    """
+    # Do not import SEARCH_PATH directly since we need to
+    # temporarily patch it for testing
+    for path in c_constants.SEARCH_PATH:
+        # Terminate the search at the first encounter
+        # with a non-system directory, to ensure that
+        # we use only system directories.
+        if path.startswith('~'):
+            break
+        # Do not use the directories that involve
+        # environment variables, or .d/ directories
+        if path.startswith('$') or path.endswith('/'):
+            continue
+        path = join(dirname(path), "aau_token")
+        if exists(path):
+            try:
+                _debug("Reading system token: %s", path)
+                with open(path, "r") as fp:
+                    return fp.read()
+            except:
+                _debug("Unabled to read system token")
+                return
+    _debug("No system token found")
+
+
+@cached
 def client_token():
     """
     Returns the client token. If a token has not yet
@@ -32,7 +64,7 @@ def client_token():
     that fails, an empty string is returned.
     """
     fpath = join(CONFIG_DIR, "aau_token")
-    return _saved_token(fpath, "client")
+    return _saved_token(fpath, "client", seed=system_token())
 
 
 @cached
