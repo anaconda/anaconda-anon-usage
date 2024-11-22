@@ -58,6 +58,7 @@ def test_token_string_disabled():
 def test_token_string_no_client_token(monkeypatch):
     def _mock_saved_token(*args, **kwargs):
         return ""
+
     monkeypatch.setattr(tokens, "environment_token", lambda prefix: "env_token")
     monkeypatch.setattr(tokens, "_saved_token", _mock_saved_token)
 

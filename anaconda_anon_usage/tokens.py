@@ -6,7 +6,8 @@
 
 import sys
 from collections import namedtuple
-from os.path import expanduser, abspath, join, exists, dirname
+from os.path import dirname, exists, expanduser, join
+
 from conda.base import constants as c_constants
 
 from . import __version__
@@ -38,20 +39,20 @@ def system_token():
         # Terminate the search at the first encounter
         # with a non-system directory, to ensure that
         # we use only system directories.
-        if path.startswith('~'):
+        if path.startswith("~"):
             break
         # Do not use the directories that involve
         # environment variables, or .d/ directories
-        if path.startswith('$') or path.endswith('/'):
+        if path.startswith("$") or path.endswith("/"):
             continue
         path = join(dirname(path), "aau_token")
         if exists(path):
             try:
                 _debug("Reading system token: %s", path)
-                with open(path, "r") as fp:
+                with open(path) as fp:
                     return fp.read()
-            except:
-                _debug("Unabled to read system token")
+            except Exception:
+                _debug("Unable to read system token")
                 return
     _debug("No system token found")
 
