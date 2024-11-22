@@ -6,12 +6,15 @@
 
 import sys
 from collections import namedtuple
-from os.path import expanduser, join
+from os import environ
+from os.path import expanduser, isfile, join
+
+from conda.base import constants as c_constants
 
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
-Tokens = namedtuple("Tokens", ("version", "client", "session", "environment"))
+Tokens = namedtuple("Tokens", ("version", "client", "session", "environment", "system"))
 CONFIG_DIR = expanduser("~/.conda")
 
 
@@ -22,6 +25,41 @@ def version_token():
     version string itself.
     """
     return __version__
+
+
+@cached
+def system_token():
+    """
+    Returns the system/organization token. Unlike the other
+    tokens, it is desirable for this token to be stored in
+    a read-only/system location, presumably installed
+    The system/organization token can be stored anywhere
+    in the standard conda search path. Ideally, an MDM system
+    would place it in a read-only system location.
+    """
+    # Do not import SEARCH_PATH directly since we need to
+    # temporarily patch it for testing
+    for path in c_constants.SEARCH_PATH:
+        # Only consider directories where
+        # .condarc could also be found
+        if not path.endswith("/.condarc"):
+            continue
+        parts = path.split("/")
+        if parts[0].startswith("$"):
+            parts[0] = environ.get(parts[0][1:])
+            if not parts[0]:
+                continue
+        parts[-1] = "org_token"
+        path = "/".join(parts)
+        if isfile(path):
+            try:
+                _debug("Reading system token: %s", path)
+                with open(path) as fp:
+                    return fp.read()
+            except Exception:
+                _debug("Unable to read system token")
+                return
+    _debug("No system token found")
 
 
 @cached
@@ -65,7 +103,11 @@ def all_tokens(prefix=None):
     Fields: version, client, session, environment
     """
     return Tokens(
-        version_token(), client_token(), session_token(), environment_token(prefix)
+        version_token(),
+        client_token(),
+        session_token(),
+        environment_token(prefix),
+        system_token(),
     )
 
 
@@ -76,7 +118,9 @@ def token_string(prefix=None, enabled=True):
     appended to the conda user agent.
     """
     parts = ["aau/" + __version__]
-    if enabled:
+    if enabled or system_token():
+        if not enabled:
+            _debug("anaconda_anon_usage enabled by system token")
         values = all_tokens(prefix)
         if values.client:
             parts.append("c/" + values.client)
@@ -84,6 +128,8 @@ def token_string(prefix=None, enabled=True):
             parts.append("s/" + values.session)
         if values.environment:
             parts.append("e/" + values.environment)
+        if values.system:
+            parts.append("o/" + values.system)
     else:
         _debug("anaconda_anon_usage disabled by config")
     result = " ".join(parts)
