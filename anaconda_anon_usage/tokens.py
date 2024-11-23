@@ -135,3 +135,7 @@ def token_string(prefix=None, enabled=True):
     result = " ".join(parts)
     _debug("Full client token: %s", result)
     return result
+
+
+if __name__ == "__main__":
+    print(token_string())
