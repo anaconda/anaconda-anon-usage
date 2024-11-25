@@ -174,7 +174,7 @@ def _saved_token(fpath, what, must_exist=None):
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
     if len(client_token) < 22:
         if len(client_token) > 0:
-            _debug("Generating longer token")
+            _debug("Generating longer %s token", what)
         client_token = _random_token(what)
         status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
         if status == WRITE_FAIL:
@@ -183,6 +183,6 @@ def _saved_token(fpath, what, must_exist=None):
         elif status == WRITE_DEFER:
             # If the environment has not yet been created we need
             # to defer the token write until later.
-            _debug("Deferring token write")
+            _debug("Deferring %s token write", what)
             DEFERRED.append((must_exist, fpath, client_token, what))
     return client_token

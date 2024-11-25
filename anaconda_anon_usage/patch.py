@@ -8,7 +8,7 @@ import sys
 from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
-from .tokens import token_string
+from .tokens import system_token, token_string
 from .utils import _debug
 
 
@@ -18,7 +18,17 @@ def _new_user_agent(ctx):
         getattr(Context, "checked_prefix", None) or context.target_prefix or sys.prefix
     )
     try:
-        token = token_string(prefix, context.anaconda_anon_usage)
+        # If an organization token exists, it overrides the value of
+        # context.anaconda_anon_usage. For most users, this has no
+        # effect. But this does provide a system administrator the
+        # ability to enable telemetry without modifying a user's
+        # configuration by installing an organization token. The
+        # effect is similar to placing "anaconda_anon_usage: true"
+        # in /etc/conda/.condarc.
+        is_enabled = context.anaconda_anon_usage or system_token()
+        if is_enabled and not context.anaconda_anon_usage:
+            _debug("system token overriding the config setting")
+        token = token_string(prefix, is_enabled)
         if token:
             result += " " + token
     except Exception:  # pragma: nocover
