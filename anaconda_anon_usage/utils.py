@@ -35,10 +35,6 @@ WRITE_SUCCESS = 0
 WRITE_DEFER = 1
 WRITE_FAIL = 2
 
-# Length of the randomly generated token. There is 6 bits of
-# randomness in each character.
-TOKEN_LENGTH = 22
-
 
 def cached(func):
     def call_if_needed(*args, **kwargs):
@@ -77,10 +73,8 @@ def _debug(s, *args, error=False):
 
 
 def _random_token(what="random"):
-    # base64 encoding captures 6 bits per character.
-    # Generate enough random bytes to ensure all charaaters are random
-    data = os.urandom((TOKEN_LENGTH * 6 - 1) // 8 + 1)
-    result = base64.urlsafe_b64encode(data).decode("ascii")[:TOKEN_LENGTH]
+    data = os.urandom(16)
+    result = base64.urlsafe_b64encode(data).strip(b"=").decode("ascii")
     _debug("Generated %s token: %s", what, result)
     return result
 
