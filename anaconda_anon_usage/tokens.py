@@ -56,7 +56,7 @@ def system_token():
             try:
                 _debug("Reading system token: %s", path)
                 with open(path) as fp:
-                    return fp.read()
+                    return fp.read().strip()
             except Exception:
                 _debug("Unable to read system token")
                 return
