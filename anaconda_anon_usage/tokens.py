@@ -16,6 +16,7 @@ from .utils import _debug, _random_token, _saved_token, cached
 
 Tokens = namedtuple("Tokens", ("version", "client", "session", "environment", "system"))
 CONFIG_DIR = expanduser("~/.conda")
+ORG_TOKEN_NAME = "org_token"
 
 
 @cached
@@ -49,7 +50,7 @@ def system_token():
             parts[0] = environ.get(parts[0][1:])
             if not parts[0]:
                 continue
-        parts[-1] = "org_token"
+        parts[-1] = ORG_TOKEN_NAME
         path = "/".join(parts)
         if isfile(path):
             try:
