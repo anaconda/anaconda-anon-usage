@@ -119,9 +119,7 @@ def token_string(prefix=None, enabled=True):
     appended to the conda user agent.
     """
     parts = ["aau/" + __version__]
-    if enabled or system_token():
-        if not enabled:
-            _debug("anaconda_anon_usage enabled by system token")
+    if enabled:
         values = all_tokens(prefix)
         if values.client:
             parts.append("c/" + values.client)

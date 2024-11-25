@@ -42,11 +42,6 @@ def test_token_string_with_system(system_token):
     assert "o/" + system_token in token_string
 
 
-def test_token_string_disabled_override_system(system_token):
-    token_string = tokens.token_string(enabled=False)
-    assert "o/" + system_token in token_string
-
-
 def test_token_string_no_client_token(monkeypatch, system_token):
     def _mock_saved_token(*args, **kwargs):
         return ""
