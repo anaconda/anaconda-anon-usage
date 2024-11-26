@@ -35,6 +35,12 @@ WRITE_SUCCESS = 0
 WRITE_DEFER = 1
 WRITE_FAIL = 2
 
+# Number of bits of randomness to include in the token
+MIN_ENTROPY = 128
+# Number of base64-encoded characters required to contain
+# at least MIN_ENTROPY bits of randomness
+TOKEN_LENGTH = (MIN_ENTROPY - 1) // 6 + 1
+
 
 def cached(func):
     def call_if_needed(*args, **kwargs):
@@ -73,8 +79,10 @@ def _debug(s, *args, error=False):
 
 
 def _random_token(what="random"):
-    data = os.urandom(16)
-    result = base64.urlsafe_b64encode(data).strip(b"=").decode("ascii")
+    # base64 encoding captures 6 bits per character.
+    # Generate enough random bytes to ensure all characters are random
+    data = os.urandom((TOKEN_LENGTH * 6 - 1) // 8 + 1)
+    result = base64.urlsafe_b64encode(data).decode("ascii")[:TOKEN_LENGTH]
     _debug("Generated %s token: %s", what, result)
     return result
 
@@ -172,7 +180,7 @@ def _saved_token(fpath, what, must_exist=None):
             _debug("Retrieved %s token: %s", what, client_token)
         except Exception as exc:
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
-    if len(client_token) < 22:
+    if len(client_token) < TOKEN_LENGTH:
         if len(client_token) > 0:
             _debug("Generating longer %s token", what)
         client_token = _random_token(what)
