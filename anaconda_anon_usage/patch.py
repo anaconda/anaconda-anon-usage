@@ -68,8 +68,14 @@ def _patch_conda_info():
 
     from conda.cli import main_info
 
-    Context._old_get_main_info_str = main_info.get_main_info_str
-    main_info.get_main_info_str = _new_get_main_info_str
+    if hasattr(main_info, "get_main_info_display"):
+        Context._old_get_main_info_str = main_info.get_main_info_display
+        main_info.get_main_info_display = _new_get_main_info_str
+    elif hasattr(main_info, "get_main_info_str"):
+        Context._old_get_main_info_str = main_info.get_main_info_str
+        main_info.get_main_info_str = _new_get_main_info_str
+    else:
+        _debug("Cannot apply anaconda_anon_usage conda info patch")
 
 
 def main(plugin=False):
