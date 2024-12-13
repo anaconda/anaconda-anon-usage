@@ -9,8 +9,6 @@ from collections import namedtuple
 from os import environ
 from os.path import expanduser, isfile, join
 
-from conda.base import constants as c_constants
-
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
@@ -38,9 +36,31 @@ def system_token():
     in the standard conda search path. Ideally, an MDM system
     would place it in a read-only system location.
     """
-    # Do not import SEARCH_PATH directly since we need to
-    # temporarily patch it for testing
-    for path in c_constants.SEARCH_PATH:
+    try:
+        # Do not import SEARCH_PATH directly since we need to
+        # temporarily patch it for testing
+        from conda.base import constants as c_constants
+
+        search_path = c_constants.SEARCH_PATH
+    except ImportError:
+        # Because this module was designed to be used even in
+        # environments that do not include conda, we need a
+        # fallback in case conda.base.constants.SEARCH_PATH
+        # is not available. This is a pruned version of the
+        # constructed value of this path as of 2024-12-13.
+        _debug("conda not installed in this environment")
+        if sys.platform == "win32":
+            search_path = ("C:/ProgramData/conda/.condarc",)
+        else:
+            search_path = ("/etc/conda/.condarc", "/var/lib/conda/.condarc")
+        search_path += (
+            "$XDG_CONFIG_HOME/conda/.condarc",
+            "~/.config/conda/.condarc",
+            "~/.conda/.condarc",
+            "~/.condarc",
+            "$CONDARC",
+        )
+    for path in search_path:
         # Only consider directories where
         # .condarc could also be found
         if not path.endswith("/.condarc"):
