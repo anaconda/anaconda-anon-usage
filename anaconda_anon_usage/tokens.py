@@ -4,7 +4,10 @@
 # conda must be avoided so that this package can be used in
 # child environments.
 
+import base64
+import json
 import sys
+import uuid
 from collections import namedtuple
 from os import environ
 from os.path import expanduser, isfile, join
@@ -12,7 +15,9 @@ from os.path import expanduser, isfile, join
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
-Tokens = namedtuple("Tokens", ("version", "client", "session", "environment", "system"))
+Tokens = namedtuple(
+    "Tokens", ("version", "client", "session", "environment", "anaconda", "system")
+)
 CONFIG_DIR = expanduser("~/.conda")
 ORG_TOKEN_NAME = "org_token"
 
@@ -118,6 +123,31 @@ def environment_token(prefix=None):
 
 
 @cached
+def anaconda_token():
+    """
+    Returns the token for the logged-in anaconda user, if present.
+    """
+    try:
+        from anaconda_cloud_auth.config import AnacondaCloudConfig
+
+        cfg = AnacondaCloudConfig()
+        if not cfg.api_key:
+            from anaconda_cloud_auth.token import TokenInfo
+
+            cfg = TokenInfo.load(domain=cfg.domain)
+            if not cfg.api_key:
+                return
+        info = cfg.api_key.split(".", 2)[1] + "==="
+        sub = json.loads(base64.b64decode(info))["sub"]
+        token = base64.urlsafe_b64encode(uuid.UUID(sub).bytes)
+        return token.decode("ascii").rstrip("=")
+    except ImportError:
+        _debug("anaconda_cloud_auth not installed in this environment")
+    except Exception as exc:
+        _debug("unexpected error obtaining anaconda token: %s", exc)
+
+
+@cached
 def all_tokens(prefix=None):
     """
     Returns the token set, in the form of a Tokens namedtuple.
@@ -128,6 +158,7 @@ def all_tokens(prefix=None):
         client_token(),
         session_token(),
         environment_token(prefix),
+        anaconda_token(),
         system_token(),
     )
 
@@ -147,6 +178,8 @@ def token_string(prefix=None, enabled=True):
             parts.append("s/" + values.session)
         if values.environment:
             parts.append("e/" + values.environment)
+        if values.anaconda:
+            parts.append("a/" + values.anaconda)
         if values.system:
             parts.append("o/" + values.system)
     else:
