@@ -16,7 +16,8 @@ from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
 Tokens = namedtuple(
-    "Tokens", ("version", "client", "session", "environment", "anaconda", "system")
+    "Tokens",
+    ("version", "client", "session", "environment", "anaconda_cloud", "system"),
 )
 CONFIG_DIR = expanduser("~/.conda")
 ORG_TOKEN_NAME = "org_token"
@@ -123,7 +124,7 @@ def environment_token(prefix=None):
 
 
 @cached
-def anaconda_token():
+def anaconda_cloud_token():
     """
     Returns the token for the logged-in anaconda user, if present.
     """
@@ -158,7 +159,7 @@ def all_tokens(prefix=None):
         client_token(),
         session_token(),
         environment_token(prefix),
-        anaconda_token(),
+        anaconda_cloud_token(),
         system_token(),
     )
 
@@ -178,8 +179,8 @@ def token_string(prefix=None, enabled=True):
             parts.append("s/" + values.session)
         if values.environment:
             parts.append("e/" + values.environment)
-        if values.anaconda:
-            parts.append("a/" + values.anaconda)
+        if values.anaconda_cloud:
+            parts.append("a/" + values.anaconda_cloud)
         if values.system:
             parts.append("o/" + values.system)
     else:
