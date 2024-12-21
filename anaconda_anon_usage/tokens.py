@@ -4,7 +4,11 @@
 # conda must be avoided so that this package can be used in
 # child environments.
 
+import base64
+import json
 import sys
+import time
+import uuid
 from collections import namedtuple
 from os import environ
 from os.path import expanduser, isfile, join
@@ -12,7 +16,10 @@ from os.path import expanduser, isfile, join
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
-Tokens = namedtuple("Tokens", ("version", "client", "session", "environment", "system"))
+Tokens = namedtuple(
+    "Tokens",
+    ("version", "client", "session", "environment", "anaconda_cloud", "system"),
+)
 CONFIG_DIR = expanduser("~/.conda")
 ORG_TOKEN_NAME = "org_token"
 
@@ -76,7 +83,9 @@ def system_token():
             try:
                 _debug("Reading system token: %s", path)
                 with open(path) as fp:
-                    return fp.read().strip()
+                    token = fp.read().strip()
+                    _debug("Retrieved system token: %s", token)
+                    return token
             except Exception:
                 _debug("Unable to read system token")
                 return
@@ -118,6 +127,50 @@ def environment_token(prefix=None):
 
 
 @cached
+def anaconda_cloud_token():
+    """
+    Returns the token for the logged-in anaconda user, if present.
+    """
+    candidates = []
+
+    def _process(data):
+        data = json.loads(base64.b64decode(data))["api_key"]
+        data = json.loads(base64.b64decode(data.split(".", 2)[1] + "==="))
+        candidates.append((data["exp"], data["sub"]))
+
+    try:
+        import keyring
+
+        data = keyring.get_password("Anaconda Cloud", "anaconda.cloud")
+        if data:
+            _debug("Reading Anaconda Cloud token in system keyring")
+            _process(data)
+    except ImportError:
+        pass
+    except Exception as exc:
+        _debug("Unexpected error reading keyring data:", exc)
+    fpath = expanduser(join("~", ".anaconda", "keyring"))
+    if isfile(fpath):
+        _debug("Reading Anaconda Cloud token in keyring file")
+        try:
+            with open(fpath, "rb") as fp:
+                data = fp.read()
+            data = json.loads(data)["Anaconda Cloud"]["anaconda.cloud"]
+            _process(data)
+        except Exception as exc:
+            _debug("Unexpected error reading keyring file: %s", exc)
+    if candidates:
+        token = sorted(candidates)[-1]
+        if time.time() > token[0]:
+            _debug("Anaconda Cloud Token has expired")
+        else:
+            token = uuid.UUID(token[1]).bytes
+            token = base64.urlsafe_b64encode(token).decode("ascii").strip("=")
+            _debug("Retrieved Anaconda Cloud token: %s", token)
+            return token
+
+
+@cached
 def all_tokens(prefix=None):
     """
     Returns the token set, in the form of a Tokens namedtuple.
@@ -128,6 +181,7 @@ def all_tokens(prefix=None):
         client_token(),
         session_token(),
         environment_token(prefix),
+        anaconda_cloud_token(),
         system_token(),
     )
 
@@ -147,6 +201,8 @@ def token_string(prefix=None, enabled=True):
             parts.append("s/" + values.session)
         if values.environment:
             parts.append("e/" + values.environment)
+        if values.anaconda_cloud:
+            parts.append("a/" + values.anaconda_cloud)
         if values.system:
             parts.append("o/" + values.system)
     else:
