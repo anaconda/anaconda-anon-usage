@@ -15,7 +15,7 @@ def aau_token_path():
 
 
 @pytest.fixture
-def system_token():
+def system_tokens():
     with tempfile.TemporaryDirectory() as tname:
         tname = tname.replace("\\", "/")
         o_path = c_constants.SEARCH_PATH
@@ -26,10 +26,13 @@ def system_token():
             tname + "/condarc.d/",
         )
         c_constants.SEARCH_PATH = n_path + o_path
-        rtoken = utils._random_token()
+        otoken = utils._random_token()
+        mtoken = utils._random_token()
         with open(tname + "/org_token", "w") as fp:
-            fp.write(rtoken)
-        yield rtoken
+            fp.write(otoken)
+        with open(tname + "/machine_token", "w") as fp:
+            fp.write(mtoken)
+        yield (otoken, mtoken)
         c_constants.SEARCH_PATH = o_path
 
 

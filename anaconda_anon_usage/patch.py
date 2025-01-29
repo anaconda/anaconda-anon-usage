@@ -8,7 +8,7 @@ import sys
 from conda.auxlib.decorators import memoizedproperty
 from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
 
-from .tokens import system_token, token_string
+from .tokens import has_admin_tokens, token_string
 from .utils import _debug
 
 
@@ -25,7 +25,7 @@ def _new_user_agent(ctx):
         # configuration by installing an organization token. The
         # effect is similar to placing "anaconda_anon_usage: true"
         # in /etc/conda/.condarc.
-        is_enabled = context.anaconda_anon_usage or system_token()
+        is_enabled = context.anaconda_anon_usage or has_admin_tokens()
         if is_enabled and not context.anaconda_anon_usage:
             _debug("system token overriding the config setting")
         token = token_string(prefix, is_enabled)
