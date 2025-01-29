@@ -131,43 +131,31 @@ def anaconda_cloud_token():
     """
     Returns the token for the logged-in anaconda user, if present.
     """
-    candidates = []
-
-    def _process(data):
+    fpath = expanduser(join("~", ".anaconda", "keyring"))
+    if not isfile(fpath):
+        return
+    _debug("Reading Anaconda Cloud token in keyring file")
+    try:
+        with open(fpath, "rb") as fp:
+            data = fp.read()
+    except Exception as exc:
+        _debug("Unexpected error reading keyring file: %s", exc)
+        return
+    try:
+        data = json.loads(data)["Anaconda Cloud"]["anaconda.cloud"]
         data = json.loads(base64.b64decode(data))["api_key"]
         data = json.loads(base64.b64decode(data.split(".", 2)[1] + "==="))
-        candidates.append((data["exp"], data["sub"]))
-
-    try:
-        import keyring
-
-        data = keyring.get_password("Anaconda Cloud", "anaconda.cloud")
-        if data:
-            _debug("Reading Anaconda Cloud token in system keyring")
-            _process(data)
-    except ImportError:
-        pass
+        data["exp"] = int(data["exp"])
+        data["sub"] = uuid.UUID(data["sub"]).bytes
     except Exception as exc:
-        _debug("Unexpected error reading keyring data:", exc)
-    fpath = expanduser(join("~", ".anaconda", "keyring"))
-    if isfile(fpath):
-        _debug("Reading Anaconda Cloud token in keyring file")
-        try:
-            with open(fpath, "rb") as fp:
-                data = fp.read()
-            data = json.loads(data)["Anaconda Cloud"]["anaconda.cloud"]
-            _process(data)
-        except Exception as exc:
-            _debug("Unexpected error reading keyring file: %s", exc)
-    if candidates:
-        token = sorted(candidates)[-1]
-        if time.time() > token[0]:
-            _debug("Anaconda Cloud Token has expired")
-        else:
-            token = uuid.UUID(token[1]).bytes
-            token = base64.urlsafe_b64encode(token).decode("ascii").strip("=")
-            _debug("Retrieved Anaconda Cloud token: %s", token)
-            return token
+        _debug("Unexpected error parsing keyring file: %s", exc)
+        return
+    if time.time() > data["exp"]:
+        _debug("Anaconda Cloud token has expired")
+        return
+    token = base64.urlsafe_b64encode(data["sub"]).decode("ascii").strip("=")
+    _debug("Retrieved Anaconda Cloud token: %s", token)
+    return token
 
 
 @cached
