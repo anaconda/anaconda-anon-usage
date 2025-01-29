@@ -111,6 +111,9 @@ jobs:
           if %errorlevel% neq 0 exit -1
           conda config --set solver classic
         )
+        if "${{ matrix.cversion }}" equ "25.1.0" (
+          python tests\integration\test_heartbeats.py
+        )
     - name: Test code (Windows)
       if: matrix.os == 'windows-latest'
       shell: cmd
@@ -128,6 +131,9 @@ jobs:
           conda config --set solver libmamba
           python tests/integration/test_config.py
           conda config --set solver classic
+        fi
+        if [[ ${{ matrix.cversion }} = 25.* ]]; then
+          python tests/integration/test_heartbeats.py
         fi
     - name: Test code (Unix)
       if: matrix.os != 'windows-latest'
