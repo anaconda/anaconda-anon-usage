@@ -57,7 +57,7 @@ jobs:
         # 23.7.0 : first plugin-based variant, but conda info --envs --json is broken
         # 23.9.0 : last variant with the classic default solver
         # 23.10.0 : first variant with the libmamba default solver
-        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.10.0', '24.9.2']
+        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.10.0', '24.11.3', '25.1.0']
     runs-on: ${{ matrix.os }}
     steps:
     - name: Retrieve the source code
@@ -78,6 +78,7 @@ jobs:
         conda-solver: classic
     - name: Build test environments
       run: |
+        conda config --add channels defaults
         rm -rf $CONDA/conda-bld || :
         mv conda-bld $CONDA/
         version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
@@ -88,6 +89,9 @@ jobs:
           echo "MAMBA=yes" >> "$GITHUB_ENV"
         fi
         conda create -p ./testenv -c local $pkg conda==${{ matrix.cversion }} $mamba --file tests/requirements.txt
+        mkdir -p ./testenv/envs
+        conda create -p ./testenv/envs/testchild1 python --yes
+        conda create -p ./testenv/envs/testchild2 python --yes
         if [ -f ./testenv/Scripts/conda.exe ]; then \
            sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
         fi
@@ -99,8 +103,6 @@ jobs:
         conda info 1>output.txt 2>&1 | type output.txt
         find "Error loading" output.txt >nul
         if %errorlevel% equ 0 exit -1
-        conda create -n testchild1 --yes
-        conda create -n testchild2 --yes
         python tests\integration\test_config.py
         if "%MAMBA%" equ "yes" (
           conda config --set solver libmamba
