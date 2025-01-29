@@ -153,7 +153,7 @@ def _deferred_exists(
             return token
 
 
-def _saved_token(fpath, what, must_exist=None):
+def _saved_token(fpath, what, must_exist=None, read_only=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
@@ -180,7 +180,7 @@ def _saved_token(fpath, what, must_exist=None):
             _debug("Retrieved %s token: %s", what, client_token)
         except Exception as exc:
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
-    if len(client_token) < TOKEN_LENGTH:
+    if not read_only and len(client_token) < TOKEN_LENGTH:
         if len(client_token) > 0:
             _debug("Generating longer %s token", what)
         client_token = _random_token(what)

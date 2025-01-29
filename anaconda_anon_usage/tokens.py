@@ -107,37 +107,30 @@ def _system_token(fname, what, find_only=False):
         if find_only:
             _debug("Found %s token: %s", what, fpath)
             return True
-        try:
-            _debug("Reading %s token: %s", what, fpath)
-            with open(fpath) as fp:
-                t_tokens = fp.read().strip()
-                if t_tokens:
-                    _debug("Retrieved %s token: %s", what, t_tokens)
-                    for token in t_tokens.split("/"):
-                        if token not in tokens:
-                            tokens.append(token)
-        except Exception as exc:
-            _debug("Unable to read %s token: %s", what, exc)
-            return
+        t_tokens = _saved_token(fpath, what)
+        if t_tokens:
+            for token in t_tokens.split("/"):
+                if token not in tokens:
+                    tokens.append(token)
     if tokens:
         return "/".join(tokens)
     _debug("No %s tokens found", what)
 
 
 @cached
-def organization_token():
+def organization_token(find_only=False):
     """
     Returns the organization token.
     """
-    return _system_token(ORG_TOKEN_NAME, "organization")
+    return _system_token(ORG_TOKEN_NAME, "organization", find_only)
 
 
 @cached
-def machine_token():
+def machine_token(find_only=False):
     """
     Returns the machine token.
     """
-    return _system_token(MACHINE_TOKEN_NAME, "machine")
+    return _system_token(MACHINE_TOKEN_NAME, "machine", find_only)
 
 
 @cached
@@ -146,9 +139,7 @@ def has_admin_tokens():
     Returns true of either a machine or org token is installed.
     Used to trigger an override of the anaconda_anon_usage setting.
     """
-    return _system_token(ORG_TOKEN_NAME, "organization", True) or _system_token(
-        MACHINE_TOKEN_NAME, "machine", True
-    )
+    return organization_token(True) or machine_token(True)
 
 
 @cached
