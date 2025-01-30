@@ -1,5 +1,5 @@
 # This module implements the changes to conda's context class
-# needed to deploy the additional anonmyous user data. It pulls
+# needed to deploy the additional anonymous user data. It pulls
 # the token management functions themselves from the api module.
 
 import re
