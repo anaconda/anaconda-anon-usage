@@ -1,6 +1,6 @@
 import tempfile
 from os import remove
-from os.path import join
+from os.path import dirname, join
 
 import pytest
 from conda.base import constants as c_constants
@@ -14,9 +14,9 @@ def aau_token_path():
     return join(tokens.CONFIG_DIR, "aau_token")
 
 
-@pytest.fixture
-def system_tokens():
+def _system_token_path():
     with tempfile.TemporaryDirectory() as tname:
+        utils._cache_clear("_search_path", "organization_token", "machine_token")
         tname = tname.replace("\\", "/")
         o_path = c_constants.SEARCH_PATH
         n_path = (
@@ -25,15 +25,28 @@ def system_tokens():
             tname + "/condarc",
             tname + "/condarc.d/",
         )
-        c_constants.SEARCH_PATH = n_path + o_path
+        c_constants.SEARCH_PATH = n_path
+        yield n_path
+        c_constants.SEARCH_PATH = o_path
+        utils._cache_clear("_search_path", "organization_token", "machine_token")
+
+
+@pytest.fixture
+def no_system_tokens():
+    for tpath in _system_token_path():
+        yield (None, None)
+
+
+@pytest.fixture
+def system_tokens():
+    for tpaths in _system_token_path():
         otoken = utils._random_token()
         mtoken = utils._random_token()
-        with open(tname + "/org_token", "w") as fp:
+        with open(dirname(tpaths[1]) + "/org_token", "w") as fp:
             fp.write(otoken)
-        with open(tname + "/machine_token", "w") as fp:
+        with open(dirname(tpaths[1]) + "/machine_token", "w") as fp:
             fp.write(mtoken)
         yield (otoken, mtoken)
-        c_constants.SEARCH_PATH = o_path
 
 
 @pytest.fixture(autouse=True)

@@ -100,6 +100,11 @@ def verify_user_agent(output, expected, envname=None, marker=None):
     return ", ".join(status), header
 
 
+if len(sys.argv) > 1:
+    shells = sys.argv[1:]
+else:
+    shells = ["posix", "cmd.exe", "powershell"]
+shells = shells + shells
 print("Testing heartbeat")
 print("-----------------")
 urls = [u for c in context.channels for u in Channel(c).urls()]
@@ -122,14 +127,7 @@ for hval in ("true", "false"):
     for envname in envs:
         # Do each one twice to make sure the user agent string
         # remains correct on repeated attempts
-        for stype in (
-            "posix",
-            "posix",
-            "cmd.exe",
-            "cmd.exe",
-            "powershell",
-            "powershell",
-        ):
+        for stype in shells:
             cmd = ["conda", "shell." + stype, "activate", envname]
             proc = subprocess.run(
                 cmd,

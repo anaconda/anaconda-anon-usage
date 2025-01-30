@@ -58,9 +58,12 @@ def cached(func):
     return call_if_needed
 
 
-def _cache_clear():
+def _cache_clear(*args):
     global CACHE
-    CACHE.clear()
+    if not args:
+        CACHE.clear()
+    else:
+        CACHE = {k: v for k, v in CACHE.items() if k[0] not in args}
 
 
 def _debug(s, *args, error=False):
