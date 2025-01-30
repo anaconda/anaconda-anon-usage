@@ -11,17 +11,26 @@ import time
 import uuid
 from collections import namedtuple
 from os import environ
-from os.path import expanduser, isfile, join
+from os.path import expanduser, isdir, isfile, join
 
 from . import __version__
 from .utils import _debug, _random_token, _saved_token, cached
 
 Tokens = namedtuple(
     "Tokens",
-    ("version", "client", "session", "environment", "anaconda_cloud", "system"),
+    (
+        "version",
+        "client",
+        "session",
+        "environment",
+        "anaconda_cloud",
+        "organization",
+        "machine",
+    ),
 )
 CONFIG_DIR = expanduser("~/.conda")
 ORG_TOKEN_NAME = "org_token"
+MACHINE_TOKEN_NAME = "machine_token"
 
 
 @cached
@@ -34,14 +43,9 @@ def version_token():
 
 
 @cached
-def system_token():
+def _search_path():
     """
-    Returns the system/organization token. Unlike the other
-    tokens, it is desirable for this token to be stored in
-    a read-only/system location, presumably installed
-    The system/organization token can be stored anywhere
-    in the standard conda search path. Ideally, an MDM system
-    would place it in a read-only system location.
+    Returns the search path for system tokens.
     """
     try:
         # Do not import SEARCH_PATH directly since we need to
@@ -67,29 +71,84 @@ def system_token():
             "~/.condarc",
             "$CONDARC",
         )
+    result = []
+    home = expanduser("~")
     for path in search_path:
         # Only consider directories where
         # .condarc could also be found
         if not path.endswith("/.condarc"):
             continue
-        parts = path.split("/")
-        if parts[0].startswith("$"):
+        parts = path.split("/")[:-1]
+        if parts[0] == "~":
+            parts[0] = home
+        elif parts[0].startswith("$"):
             parts[0] = environ.get(parts[0][1:])
             if not parts[0]:
                 continue
-        parts[-1] = ORG_TOKEN_NAME
         path = "/".join(parts)
-        if isfile(path):
-            try:
-                _debug("Reading system token: %s", path)
-                with open(path) as fp:
-                    token = fp.read().strip()
-                    _debug("Retrieved system token: %s", token)
-                    return token
-            except Exception:
-                _debug("Unable to read system token")
-                return
-    _debug("No system token found")
+        if isdir(path) and path != home:
+            result.append(path)
+    return result
+
+
+def _system_token(fname, what, find_only=False):
+    """
+    Returns an organization or machine token installed somewhere
+    in the conda path. Unlike most tokens, these will typically
+    be installed by system administrators, often by mobile device
+    management software. There can also be multiple tokens present
+    along the path, in which case we combine them
+    """
+    tokens = []
+    for path in _search_path():
+        fpath = join(path, fname)
+        if not isfile(fpath):
+            continue
+        if find_only:
+            _debug("Found %s token: %s", what, fpath)
+            return True
+        try:
+            _debug("Reading %s token: %s", what, fpath)
+            with open(fpath) as fp:
+                t_tokens = fp.read().strip()
+                if t_tokens:
+                    _debug("Retrieved %s token: %s", what, t_tokens)
+                    for token in t_tokens.split("/"):
+                        if token not in tokens:
+                            tokens.append(token)
+        except Exception as exc:
+            _debug("Unable to read %s token: %s", what, exc)
+            return
+    if tokens:
+        return "/".join(tokens)
+    _debug("No %s tokens found", what)
+
+
+@cached
+def organization_token():
+    """
+    Returns the organization token.
+    """
+    return _system_token(ORG_TOKEN_NAME, "organization")
+
+
+@cached
+def machine_token():
+    """
+    Returns the machine token.
+    """
+    return _system_token(MACHINE_TOKEN_NAME, "machine")
+
+
+@cached
+def has_admin_tokens():
+    """
+    Returns true of either a machine or org token is installed.
+    Used to trigger an override of the anaconda_anon_usage setting.
+    """
+    return _system_token(ORG_TOKEN_NAME, "organization", True) or _system_token(
+        MACHINE_TOKEN_NAME, "machine", True
+    )
 
 
 @cached
@@ -170,7 +229,8 @@ def all_tokens(prefix=None):
         session_token(),
         environment_token(prefix),
         anaconda_cloud_token(),
-        system_token(),
+        organization_token(),
+        machine_token(),
     )
 
 
@@ -191,8 +251,10 @@ def token_string(prefix=None, enabled=True):
             parts.append("e/" + values.environment)
         if values.anaconda_cloud:
             parts.append("a/" + values.anaconda_cloud)
-        if values.system:
-            parts.append("o/" + values.system)
+        if values.organization:
+            parts.append("o/" + values.organization)
+        if values.machine:
+            parts.append("m/" + values.machine)
     else:
         _debug("anaconda_anon_usage disabled by config")
     result = " ".join(parts)
@@ -201,4 +263,7 @@ def token_string(prefix=None, enabled=True):
 
 
 if __name__ == "__main__":
-    print(token_string())
+    if "--random" in sys.argv:
+        print(_random_token())
+    else:
+        print(token_string())

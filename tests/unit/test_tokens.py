@@ -26,6 +26,7 @@ def test_token_string():
     assert "s/" in token_string
     assert "e/" in token_string
     assert "o/" not in token_string
+    assert "m/" not in token_string
 
 
 def test_token_string_disabled():
@@ -35,14 +36,17 @@ def test_token_string_disabled():
     assert "s/" not in token_string
     assert "e/" not in token_string
     assert "o/" not in token_string
+    assert "m/" not in token_string
 
 
-def test_token_string_with_system(system_token):
+def test_token_string_with_system(system_tokens):
+    org_token, mch_token = system_tokens
     token_string = tokens.token_string()
-    assert "o/" + system_token in token_string
+    assert "o/" + org_token in token_string
+    assert "m/" + mch_token in token_string
 
 
-def test_token_string_no_client_token(monkeypatch, system_token):
+def test_token_string_no_client_token(monkeypatch, system_tokens):
     def _mock_saved_token(*args, **kwargs):
         return ""
 
@@ -50,38 +54,46 @@ def test_token_string_no_client_token(monkeypatch, system_token):
     monkeypatch.setattr(tokens, "_saved_token", _mock_saved_token)
 
     token_string = tokens.token_string()
+    org_token, mch_token = system_tokens
     assert "c/" not in token_string
     assert "s/" in token_string
     assert "e/env_token" in token_string
-    assert "o/" + system_token in token_string
+    assert "o/" + org_token in token_string
+    assert "m/" + mch_token in token_string
 
 
-def test_token_string_no_environment_token(monkeypatch, system_token):
+def test_token_string_no_environment_token(monkeypatch, system_tokens):
     monkeypatch.setattr(tokens, "environment_token", lambda prefix: "")
 
     token_string = tokens.token_string()
+    org_token, mch_token = system_tokens
     assert "c/" in token_string
     assert "s/" in token_string
     assert "e/" not in token_string
-    assert "o/" + system_token in token_string
+    assert "o/" + org_token in token_string
+    assert "m/" + mch_token in token_string
 
 
-def test_token_string_full_readonly(monkeypatch, system_token):
+def test_token_string_full_readonly(monkeypatch, system_tokens):
     monkeypatch.setattr(utils, "READ_CHAOS", "ce")
     monkeypatch.setattr(utils, "WRITE_CHAOS", "ce")
     token_string = tokens.token_string()
+    org_token, mch_token = system_tokens
     assert "c/" not in token_string
     assert "s/" in token_string
     assert "e/" not in token_string
-    assert "o/" + system_token in token_string
+    assert "o/" + org_token in token_string
+    assert "m/" + mch_token in token_string
 
 
-def test_token_string_env_readonly(monkeypatch, system_token):
+def test_token_string_env_readonly(monkeypatch, system_tokens):
     monkeypatch.setattr(utils, "READ_CHAOS", "e")
     monkeypatch.setattr(utils, "WRITE_CHAOS", "e")
 
     token_string = tokens.token_string()
+    org_token, mch_token = system_tokens
     assert "c/" in token_string
     assert "s/" in token_string
     assert "e/" not in token_string
-    assert "o/" + system_token in token_string
+    assert "o/" + org_token in token_string
+    assert "m/" + mch_token in token_string

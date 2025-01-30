@@ -5,7 +5,7 @@ import subprocess
 import sys
 from os.path import basename, expanduser, isfile, join
 
-from anaconda_anon_usage.tokens import system_token
+from anaconda_anon_usage import tokens as m_tokens
 
 nfailed = 0
 
@@ -40,16 +40,18 @@ def _config(value, ctype):
     subprocess.run(["conda", "config", "--set", KEY, cvalue], capture_output=True)
     if ctype == "env" or value == "default":
         subprocess.run(["conda", "config", "--remove-key", KEY], capture_output=True)
-    return value in yes_modes or system_token()
+    return value in yes_modes or m_tokens.has_admin_tokens()
 
 
 all_modes = ["true", "false", "yes", "no", "on", "off", "default"]
 yes_modes = ("true", "yes", "on", "default")
 all_tokens = {"aau", "c", "s", "e"}
 aau_only = {"aau"}
-if isfile("/etc/conda/org_token") or isfile("C:/ProgramData/conda/org_token"):
+if m_tokens.organization_token():
     all_tokens.add("o")
-if isfile(join(expanduser("~"), ".anaconda", "keyring")):
+if m_tokens.machine_token():
+    all_tokens.add("m")
+if m_tokens.anaconda_cloud_token():
     all_tokens.add("a")
 
 proc = subprocess.run(
