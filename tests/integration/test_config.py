@@ -5,6 +5,8 @@ import subprocess
 import sys
 from os.path import basename, expanduser, isfile, join
 
+from anaconda_anon_usage.tokens import system_token
+
 nfailed = 0
 
 KEY = "anaconda_anon_usage"
@@ -29,18 +31,26 @@ else:
 print("current condarc mode:", f_mode)
 
 
-def _config(value):
-    if value == "default":
-        _config("true")
+def _config(value, ctype):
+    if ctype == "env":
+        os.environ[ENVKEY] = value
+    elif ENVKEY in os.environ:
+        del os.environ[ENVKEY]
+    cvalue = "true" if ctype == "env" or value == "default" else value
+    subprocess.run(["conda", "config", "--set", KEY, cvalue], capture_output=True)
+    if ctype == "env" or value == "default":
         subprocess.run(["conda", "config", "--remove-key", KEY], capture_output=True)
-    else:
-        subprocess.run(["conda", "config", "--set", KEY, value], capture_output=True)
+    return value in yes_modes or system_token()
 
 
 all_modes = ["true", "false", "yes", "no", "on", "off", "default"]
 yes_modes = ("true", "yes", "on", "default")
 all_tokens = {"aau", "c", "s", "e"}
 aau_only = {"aau"}
+if isfile("/etc/conda/org_token") or isfile("C:/ProgramData/conda/org_token"):
+    all_tokens.add("o")
+if isfile(join(expanduser("~"), ".anaconda", "keyring")):
+    all_tokens.add("a")
 
 proc = subprocess.run(
     ["conda", "info", "--envs", "--json"],
@@ -57,15 +67,13 @@ for env in envs:
     # we get the same token each time
     all_modes.append("e/" + env)
     all_modes.append("e/" + env)
-maxlen = max(len(e) for e in envs)
+maxlen = max(6, max(len(e) for e in envs))
 
 first = True
 other_tokens = {}
 all_sessions = set()
 all_environments = set()
 for ctype in ("env", "cfg"):
-    if ctype == "cfg" and ENVKEY in os.environ:
-        del os.environ[ENVKEY]
     for mode in all_modes:
         if mode.startswith("e/"):
             mode, envname = "default", mode[2:]
@@ -74,12 +82,7 @@ for ctype in ("env", "cfg"):
             envname = envpath = ""
         if mode == "default" and ctype == "env":
             continue
-        enabled = mode in yes_modes
-        if ctype == "env":
-            os.environ[ENVKEY] = mode
-            _config("false" if enabled else "true")
-        else:
-            _config(mode)
+        enabled = _config(mode, ctype)
         # Make sure to leave override-channels and the full channel URL in here.
         # This allows this command to run fully no matter what we do to channel_alias
         # and default_channels
@@ -157,7 +160,8 @@ for ctype in ("env", "cfg"):
             status = ", ".join(status)
         else:
             status = "OK"
-        print(f"{ctype} {mode:<7} | {envname:{maxlen}} | {status}")
+        emsg = envname or "<base>"
+        print(f"{ctype} {mode:<7} | {emsg:{maxlen}} | {status}")
         if DEBUG_PREFIX:
             for line in proc.stderr.splitlines():
                 if line.startswith(DEBUG_PREFIX):
@@ -178,10 +182,10 @@ if f_mode == "missing":
         pass
 elif f_mode == "default":
     print("removing config value")
-    _config("default")
+    _config("default", "cfg")
 else:
     print("restoring config value:", f_mode)
-    _config(f_mode)
+    _config(f_mode, "cfg")
 
 print("")
 print("Checking environment tokens")
