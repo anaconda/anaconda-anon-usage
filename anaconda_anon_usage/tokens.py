@@ -107,7 +107,7 @@ def _system_token(fname, what, find_only=False):
         if find_only:
             _debug("Found %s token: %s", what, fpath)
             return True
-        t_tokens = _saved_token(fpath, what)
+        t_tokens = _saved_token(fpath, what, read_only=True)
         if t_tokens:
             for token in t_tokens.split("/"):
                 if token not in tokens:

@@ -10,9 +10,10 @@ import argparse
 import os
 import sys
 from threading import Thread
+from urllib.parse import urljoin
 
 from conda.base.context import context
-from conda.gateways.connection.session import CondaSession
+from conda.gateways.connection.session import get_session
 from conda.models.channel import Channel
 
 from . import utils
@@ -21,10 +22,11 @@ VERBOSE = False
 STANDALONE = False
 DRY_RUN = os.environ.get("ANACONDA_HEARTBEAT_DRY_RUN")
 
-CLD_REPO = "https://repo.anaconda.cloud"
-ORG_REPO = "https://conda.anaconda.org"
-COM_REPO = "https://repo.anaconda.com/pkgs"
-HEARTBEAT_PATH = "/noarch/activate-0.0.0-0.conda"
+CLD_REPO = "https://repo.anaconda.cloud/"
+ORG_REPO = "https://conda.anaconda.org/"
+COM_REPO = "https://repo.anaconda.com/pkgs/"
+REPOS = (CLD_REPO, COM_REPO, ORG_REPO)
+HEARTBEAT_PATH = "noarch/activate-0.0.0-0.conda"
 
 
 def _print(msg, *args, standalone=False, error=False):
@@ -54,7 +56,7 @@ def attempt_heartbeat(channel=None, path=None, wait=False):
     global DRY_RUN
     line = "------------------------"
     _print(line, standalone=True)
-    _print("anaconda-ident heartbeat", standalone=True)
+    _print("anaconda-anon-usage heartbeat", standalone=True)
     _print(line, standalone=True)
 
     if not hasattr(context, "_aau_initialized"):
@@ -70,25 +72,22 @@ def attempt_heartbeat(channel=None, path=None, wait=False):
             context._channels = ["defaults"]
         urls = [u for c in context.channels for u in Channel(c).urls()]
         urls.extend(u.rstrip("/") for u in context.channel_alias.urls())
-        if any(u.startswith(CLD_REPO) for u in urls):
-            base = CLD_REPO
-        elif any(u.startswith(COM_REPO) for u in urls):
-            base = COM_REPO
-        elif any(u.startswith(ORG_REPO) for u in urls):
-            base = ORG_REPO
+        for base in REPOS:
+            if any(u.startswith(base) for u in urls):
+                break
         else:
             _print("No valid heartbeat channel")
             _print(line, standalone=True)
             return
-        url = base + "/" + (channel or "main")
-    url = url.rstrip("/") + "/" + (path or HEARTBEAT_PATH).lstrip("/")
+        url = urljoin(base, channel or "main") + "/"
+    url = urljoin(url, path or HEARTBEAT_PATH)
 
     _print("Heartbeat url: %s", url)
     _print("User agent: %s", context.user_agent)
     if DRY_RUN:
         _print("Dry run selected, not sending heartbeat.")
     else:
-        session = CondaSession()
+        session = get_session(url)
         t = Thread(target=_ping, args=(session, url, wait), daemon=True)
         t.start()
         _print("%saiting for response", "W" if wait else "Not w")
@@ -99,18 +98,19 @@ def attempt_heartbeat(channel=None, path=None, wait=False):
 def main():
     global VERBOSE
     global DRY_RUN
+    global STANDALONE
     p = argparse.ArgumentParser()
-    p.add_argument("--channel", default=None)
-    p.add_argument("--path", default=None)
-    p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--verbose", action="store_true")
-    p.add_argument("--wait", action="store_true")
+    p.add_argument("-c", "--channel", default=None)
+    p.add_argument("-p", "--path", default=None)
+    p.add_argument("-d", "--dry-run", action="store_true")
+    p.add_argument("-q", "--quiet", action="store_true")
+    p.add_argument("-w", "--wait", action="store_true")
     args = p.parse_args()
-    VERBOSE = args.verbose
+    STANDALONE = True
+    VERBOSE = not args.quiet
     DRY_RUN = args.dry_run
     attempt_heartbeat(args.channel, args.path, args.wait)
 
 
 if __name__ == "__main__":
-    STANDALONE = True
     main()
