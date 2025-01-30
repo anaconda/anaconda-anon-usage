@@ -104,9 +104,11 @@ jobs:
         find "Error loading" output.txt >nul
         if %errorlevel% equ 0 exit -1
         python tests\integration\test_config.py
+        if %errorlevel% neq 0 exit -1
         if "%MAMBA%" equ "yes" (
           conda config --set solver libmamba
           python tests\integration\test_config.py
+          if %errorlevel% neq 0 exit -1
           conda config --set solver classic
         )
     - name: Test code (Windows)
