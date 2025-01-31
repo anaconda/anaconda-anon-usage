@@ -56,7 +56,7 @@ def verify_user_agent(output, expected, envname=None, marker=None):
     other_tokens["n"] = envname if envname else "base"
 
     user_agent = ""
-    marker = marker or "User-Agent"
+    marker = marker or "[uU]ser.[aA]gent"  # codespell:ignore
     MATCH_RE = r".*" + marker + r'(["\']?): *(["\']?)(.+)'
     for v in output.splitlines():
         match = re.match(MATCH_RE, v)
@@ -155,9 +155,7 @@ for hval in ("true", "false"):
             elif hval == "false" and (no_hb_url or hb_urls):
                 status = "NOT DISABLED"
             if hb_urls and not status:
-                status, header = verify_user_agent(
-                    proc.stderr, expected, envname, "Full client token"
-                )
+                status, header = verify_user_agent(proc.stderr, expected, envname)
             if need_header:
                 if header:
                     print("|", header)

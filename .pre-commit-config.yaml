@@ -37,7 +37,6 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: [--write]
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.31.1
     hooks:

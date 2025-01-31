@@ -14,7 +14,7 @@ from os import environ
 from os.path import expanduser, isdir, isfile, join
 
 from . import __version__
-from .utils import _debug, _random_token, _saved_token, cached
+from .utils import _debug, _random_token, _read_file, _saved_token, cached
 
 Tokens = namedtuple(
     "Tokens",
@@ -104,7 +104,7 @@ def _system_token(fname, what):
         fpath = join(path, fname)
         if not isfile(fpath):
             continue
-        t_tokens = _saved_token(fpath, what, read_only=True)
+        t_tokens = _read_file(fpath, what + "token")
         if t_tokens:
             for token in t_tokens.split("/"):
                 if token not in tokens:
@@ -170,14 +170,8 @@ def anaconda_cloud_token():
     Returns the token for the logged-in anaconda user, if present.
     """
     fpath = expanduser(join("~", ".anaconda", "keyring"))
-    if not isfile(fpath):
-        return
-    _debug("Reading Anaconda Cloud token in keyring file")
-    try:
-        with open(fpath, "rb") as fp:
-            data = fp.read()
-    except Exception as exc:
-        _debug("Unexpected error reading keyring file: %s", exc)
+    data = _read_file(fpath, "anaconda keyring")
+    if not data:
         return
     try:
         data = json.loads(data)["Anaconda Cloud"]["anaconda.cloud"]
@@ -237,7 +231,7 @@ def token_string(prefix=None, enabled=True):
     else:
         _debug("anaconda_anon_usage disabled by config")
     result = " ".join(parts)
-    _debug("Full client token: %s", result)
+    _debug("Full aau token string: %s", result)
     return result
 
 
