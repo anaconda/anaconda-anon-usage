@@ -91,7 +91,7 @@ def _search_path():
     return result
 
 
-def _system_token(fname, what, find_only=False):
+def _system_token(fname, what):
     """
     Returns an organization or machine token installed somewhere
     in the conda path. Unlike most tokens, these will typically
@@ -104,9 +104,6 @@ def _system_token(fname, what, find_only=False):
         fpath = join(path, fname)
         if not isfile(fpath):
             continue
-        if find_only:
-            _debug("Found %s token: %s", what, fpath)
-            return True
         t_tokens = _saved_token(fpath, what, read_only=True)
         if t_tokens:
             for token in t_tokens.split("/"):
@@ -118,28 +115,19 @@ def _system_token(fname, what, find_only=False):
 
 
 @cached
-def organization_token(find_only=False):
+def organization_token():
     """
     Returns the organization token.
     """
-    return _system_token(ORG_TOKEN_NAME, "organization", find_only)
+    return _system_token(ORG_TOKEN_NAME, "organization")
 
 
 @cached
-def machine_token(find_only=False):
+def machine_token():
     """
     Returns the machine token.
     """
-    return _system_token(MACHINE_TOKEN_NAME, "machine", find_only)
-
-
-@cached
-def has_admin_tokens():
-    """
-    Returns true of either a machine or org token is installed.
-    Used to trigger an override of the anaconda_anon_usage setting.
-    """
-    return organization_token(True) or machine_token(True)
+    return _system_token(MACHINE_TOKEN_NAME, "machine")
 
 
 @cached
