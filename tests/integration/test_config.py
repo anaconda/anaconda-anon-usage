@@ -40,7 +40,7 @@ def _config(value, ctype):
     subprocess.run(["conda", "config", "--set", KEY, cvalue], capture_output=True)
     if ctype == "env" or value == "default":
         subprocess.run(["conda", "config", "--remove-key", KEY], capture_output=True)
-    return value in yes_modes or m_tokens.has_admin_tokens()
+    return value in yes_modes
 
 
 all_modes = ["true", "false", "yes", "no", "on", "off", "default"]

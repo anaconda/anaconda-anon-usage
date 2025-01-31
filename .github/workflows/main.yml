@@ -78,62 +78,50 @@ jobs:
         conda-solver: classic
     - name: Build test environments
       run: |
+        source $CONDA/etc/profile.d/conda.sh
         conda config --add channels defaults
+        conda activate base
         rm -rf $CONDA/conda-bld || :
         mv conda-bld $CONDA/
         version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
         pkg="anaconda-anon-usage=$version"
         conda install -c local anaconda-client constructor $pkg
-        if [[ "${{ matrix.cversion }}" == 23.7.* ]]; then
-          mamba=conda-libmamba-solver
-          echo "MAMBA=yes" >> "$GITHUB_ENV"
-        fi
-        conda create -p ./testenv -c local $pkg conda==${{ matrix.cversion }} $mamba --file tests/requirements.txt
+        conda create -p ./testenv -c local $pkg conda==${{ matrix.cversion }} --file tests/requirements.txt
         mkdir -p ./testenv/envs
         conda create -p ./testenv/envs/testchild1 python --yes
         conda create -p ./testenv/envs/testchild2 python --yes
         if [ -f ./testenv/Scripts/conda.exe ]; then \
            sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
         fi
-    - name: Test environments (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: cmd
+    - name: Test code
       run: |
-        call testenv\Scripts\activate
-        conda info 1>output.txt 2>&1 | type output.txt
-        find "Error loading" output.txt >nul
-        if %errorlevel% equ 0 exit -1
-        python tests\integration\test_config.py
-        if %errorlevel% neq 0 exit -1
-        if "%MAMBA%" equ "yes" (
-          conda config --set solver libmamba
-          python tests\integration\test_config.py
-          if %errorlevel% neq 0 exit -1
-          conda config --set solver classic
-        )
-    - name: Test code (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: cmd
-      run: |
-        call testenv\Scripts\activate
-        pytest
-    - name: Test environments (Unix)
-      if: matrix.os != 'windows-latest'
-      run: |
-        source ./testenv/bin/activate
+        source testenv/etc/profile.d/conda.sh
+        conda activate base
         conda info 2>&1 | tee output.txt
         if grep -q 'Error loading' output.txt; then exit -1; fi
+        pytest
         python tests/integration/test_config.py
-        if [ "$MAMBA" = "yes" ]; then
-          conda config --set solver libmamba
-          python tests/integration/test_config.py
-          conda config --set solver classic
-        fi
-    - name: Test code (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Test heartbeats (pwsh)
+      if: matrix.os == 'windows-latest' && (matrix.cversion == '24.11.3' || matrix.cversion == '25.1.1')
+      shell: pwsh
+      run: |
+        .\testenv\shell\condabin\conda-hook.ps1
+        conda activate base
+        python tests\integration\test_heartbeats.py powershell
+    - name: Test heartbeats (cmd)
+      if: matrix.os == 'windows-latest' && (matrix.cversion == '24.11.3' || matrix.cversion == '25.1.1')
+      shell: cmd
+      run: |
+        call .\testenv\Scripts\activate.bat
+        if %errorlevel% neq 0 exit 1
+        python tests\integration\test_heartbeats.py cmd.exe
+        if %errorlevel% neq 0 exit 1
+    - name: Test heartbeats (bash)
+      if: matrix.os != 'windows-latest' && (matrix.cversion == '24.11.3' || matrix.cversion == '25.1.1')
       run: |
         source ./testenv/bin/activate
-        pytest
+        conda info
+        python tests/integration/test_heartbeats.py posix
     - name: Build an installer
       run: |
         cd tests/integration
@@ -143,6 +131,7 @@ jobs:
       if: matrix.os == 'windows-latest'
       shell: cmd
       run: |
+        source $CONDA/bin/activate
         cd tests/integration
         start /wait AIDTest-1.0-Windows-x86_64.exe /S /D=%USERPROFILE%\aidtest
         call %USERPROFILE%\aidtest\Scripts\activate

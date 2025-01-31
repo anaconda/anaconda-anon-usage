@@ -2,13 +2,20 @@
 # needed to deploy the additional anonymous user data. It pulls
 # the token management functions themselves from the api module.
 
+import os
 import re
 import sys
 
 from conda.auxlib.decorators import memoizedproperty
-from conda.base.context import Context, ParameterLoader, PrimitiveParameter, context
+from conda.base.context import (
+    Context,
+    ParameterLoader,
+    PrimitiveParameter,
+    context,
+    locate_prefix_by_name,
+)
 
-from .tokens import has_admin_tokens, token_string
+from .tokens import token_string
 from .utils import _debug
 
 
@@ -18,17 +25,7 @@ def _new_user_agent(ctx):
         getattr(Context, "checked_prefix", None) or context.target_prefix or sys.prefix
     )
     try:
-        # If an organization token exists, it overrides the value of
-        # context.anaconda_anon_usage. For most users, this has no
-        # effect. But this does provide a system administrator the
-        # ability to enable telemetry without modifying a user's
-        # configuration by installing an organization token. The
-        # effect is similar to placing "anaconda_anon_usage: true"
-        # in /etc/conda/.condarc.
-        is_enabled = context.anaconda_anon_usage or has_admin_tokens()
-        if is_enabled and not context.anaconda_anon_usage:
-            _debug("system token overriding the config setting")
-        token = token_string(prefix, is_enabled)
+        token = token_string(prefix, context.anaconda_anon_usage)
         if token:
             result += " " + token
     except Exception:  # pragma: nocover
@@ -47,6 +44,23 @@ def _new_get_main_info_str(info_dict):
         ua_redact = re.sub(r" ([a-z]/)([^ ]+)", r" \1.", ua)
         info_dict["user_agent"] = ua_redact
     return Context._old_get_main_info_str(info_dict)
+
+
+def _new_activate(self):
+    if not context.anaconda_heartbeat:
+        return self._old_activate()
+    try:
+        from .heartbeat import attempt_heartbeat
+
+        env = self.env_name_or_prefix
+        if env and os.sep not in env:
+            env = locate_prefix_by_name(env)
+        Context.checked_prefix = env or sys.prefix
+        attempt_heartbeat()
+    except Exception as exc:
+        _debug("Failed to attempt heartbeat: %s", exc, error=True)
+    finally:
+        return self._old_activate()
 
 
 def _patch_check_prefix():
@@ -78,24 +92,43 @@ def _patch_conda_info():
         _debug("Cannot apply anaconda_anon_usage conda info patch")
 
 
-def main(plugin=False):
+def _patch_activate():
+    _debug("Applying anaconda_anon_usage activate patch")
+    from conda import activate
+
+    if hasattr(activate, "_Activator"):
+        _Activator = activate._Activator
+        if hasattr(_Activator, "activate"):
+            _Activator._old_activate = _Activator.activate
+            _Activator.activate = _new_activate
+            return
+    _debug("Cannot apply anaconda_anon_usage activate patch")
+
+
+def main(plugin=False, command=None):
     if getattr(context, "_aau_initialized", None) is not None:
         _debug("anaconda_anon_usage already active")
         return False
     _debug("Applying anaconda_anon_usage context patch")
 
     # conda.base.context.Context.user_agent
-    # Adds the ident token to the user agent string
+    # Adds the ident tokens to the user agent string
     Context._old_user_agent = Context.user_agent
     # Using a different name ensures that this is stored
     # in the cache in a different place than the original
     Context.user_agent = memoizedproperty(_new_user_agent)
 
-    # conda.base.context.Context
-    # Adds anaconda_anon_usage as a managed string config parameter
+    # conda.base.context.Context.anaconda_anon_usage
+    # Adds the anaconda_anon_usage toggle, defaulting to true
     _param = ParameterLoader(PrimitiveParameter(True))
     Context.anaconda_anon_usage = _param
     Context.parameter_names += (_param._set_name("anaconda_anon_usage"),)
+
+    # conda.base.context.Context
+    # Adds the anaconda_heartbeat toggle, defaulting to false
+    _param = ParameterLoader(PrimitiveParameter(False))
+    Context.anaconda_heartbeat = _param
+    Context.parameter_names += (_param._set_name("anaconda_heartbeat"),)
 
     # conda.base.context.checked_prefix
     # Saves the prefix used in a conda install command
@@ -109,7 +142,10 @@ def main(plugin=False):
         # The pre-command plugin avoids the circular import
         # of conda.cli.install, so we can apply the patch now
         _patch_conda_info()
-        _patch_check_prefix()
+        if command == "activate":
+            _patch_activate()
+        if command == "info":
+            _patch_check_prefix()
     else:
         # We need to delay further. Schedule the patch for the
         # next time context.__init__ is called.

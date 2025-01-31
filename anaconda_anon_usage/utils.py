@@ -3,7 +3,7 @@ import base64
 import errno
 import os
 import sys
-from os.path import dirname, exists
+from os.path import dirname, isdir, isfile
 from threading import RLock
 from typing import List, Optional
 
@@ -58,9 +58,12 @@ def cached(func):
     return call_if_needed
 
 
-def _cache_clear():
+def _cache_clear(*args):
     global CACHE
-    CACHE.clear()
+    if not args:
+        CACHE.clear()
+    else:
+        CACHE = {k: v for k, v in CACHE.items() if k[0] not in args}
 
 
 def _debug(s, *args, error=False):
@@ -106,7 +109,7 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
     Attempt to write the token to the given location.
     Return True with success, False otherwise.
     """
-    if must_exist and not exists(must_exist):
+    if must_exist and not isdir(must_exist):
         _debug("Directory not ready: %s", must_exist)
         return WRITE_DEFER
     try:
@@ -153,7 +156,7 @@ def _deferred_exists(
             return token
 
 
-def _saved_token(fpath, what, must_exist=None):
+def _read_file(fpath, what, must_exist=None, read_only=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
@@ -165,32 +168,48 @@ def _saved_token(fpath, what, must_exist=None):
     # If a deferred token exits for the given fpath, return it instead of generating a new one.
     deferred_token = _deferred_exists(fpath, what)
     if deferred_token:
-        _debug("Returning deferred %s token: %s", what, deferred_token)
+        _debug("Returning deferred %s: %s", what, deferred_token)
         return deferred_token
 
-    client_token = ""
-    _debug("%s token path: %s", what.capitalize(), fpath)
+    _debug("%s path: %s", what.capitalize(), fpath)
     if what[0] in READ_CHAOS:
-        _debug("Pretending %s token is not present", what)
-    elif exists(fpath):
+        _debug("Pretending %s is not present", what)
+    elif not isfile(fpath):
+        _debug("%s file is not present", what)
+    else:
         try:
             # Use just the first line of the file, if it exists
             with open(fpath) as fp:
-                client_token = "".join(fp.read().splitlines()[:1])
-            _debug("Retrieved %s token: %s", what, client_token)
+                data = fp.read()
+            _debug("Retrieved %s: %s", what, data)
+            return data
         except Exception as exc:
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
-    if len(client_token) < TOKEN_LENGTH:
+
+
+def _saved_token(fpath, what, must_exist=None, read_only=False):
+    """
+    Implements the saved token functionality. If the specified
+    file exists, and contains a token with the right format,
+    return it. Otherwise, generate a new one and save it in
+    this location. If that fails, return an empty string.
+    """
+    global DEFERRED
+    what = what + " token"
+    client_token = _read_file(fpath, what) or ""
+    # Just use the first line of the file
+    client_token = "".join(client_token.splitlines()[:1])
+    if not read_only and len(client_token) < TOKEN_LENGTH:
         if len(client_token) > 0:
-            _debug("Generating longer %s token", what)
+            _debug("Generating longer %s", what)
         client_token = _random_token(what)
         status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
         if status == WRITE_FAIL:
-            _debug("Returning blank %s token", what)
+            _debug("Returning blank %s", what)
             return ""
         elif status == WRITE_DEFER:
             # If the environment has not yet been created we need
             # to defer the token write until later.
-            _debug("Deferring %s token write", what)
+            _debug("Deferring %s write", what)
             DEFERRED.append((must_exist, fpath, client_token, what))
     return client_token
