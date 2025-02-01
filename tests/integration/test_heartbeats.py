@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+from os.path import dirname, join
 
 from conda.base.context import context
 from conda.models.channel import Channel
@@ -20,7 +21,6 @@ if os.path.isfile("/etc/conda/machine_token"):
     expected += ("m",)
 
 os.environ["ANACONDA_ANON_USAGE_DEBUG"] = "1"
-os.environ["ANACONDA_HEARTBEAT_DRY_RUN"] = "1"
 
 ALL_FIELDS = {"aau", "aid", "c", "s", "e", "u", "h", "n", "m", "o", "U", "H", "N"}
 
@@ -49,23 +49,10 @@ all_environments = set()
 
 
 def verify_user_agent(output, expected, envname=None, marker=None):
-    # Unfortunately conda has evolved how it logs request headers
-    # So this regular expression attempts to match multiple forms
-    # > User-Agent: conda/...
-    # .... {'User-Agent': 'conda/...', ...}
     other_tokens["n"] = envname if envname else "base"
 
-    user_agent = ""
-    marker = marker or "[uU]ser.[aA]gent"  # codespell:ignore
-    MATCH_RE = r".*" + marker + r'(["\']?): *(["\']?)(.+)'
-    for v in output.splitlines():
-        match = re.match(MATCH_RE, v)
-        if match:
-            _, delim, user_agent = match.groups()
-            if delim and delim in user_agent:
-                user_agent = user_agent.split(delim, 1)[0]
-            break
-
+    match = re.search(r"^.*User-Agent: (.+)$", output, re.MULTILINE)
+    user_agent = match.groups()[0] if match else ""
     new_values = [t.split("/", 1) for t in user_agent.split(" ") if "/" in t]
     new_values = {k: v for k, v in new_values if k in ALL_FIELDS}
     header = " ".join(f"{k}/{v}" for k, v in new_values.items())
@@ -128,7 +115,14 @@ for hval in ("true", "false"):
         # Do each one twice to make sure the user agent string
         # remains correct on repeated attempts
         for stype in shells:
-            cmd = ["conda", "shell." + stype, "activate", envname]
+            # Using the proxy tester allows us to test this without the requests actually
+            # making it to repo.anaconda.com. The tester returns 404 for all requests. It
+            # also has the advantage of making sure our code respects proxies properly
+            pscript = join(dirname(__file__), "proxy_tester.py")
+            # fmt: off
+            cmd = ["python", pscript, "--return-code", "404", "--",
+                   "python", "-m", "conda", "shell." + stype, "activate", envname]
+            # fmt: on
             proc = subprocess.run(
                 cmd,
                 check=False,
@@ -155,7 +149,7 @@ for hval in ("true", "false"):
             elif hval == "false" and (no_hb_url or hb_urls):
                 status = "NOT DISABLED"
             if hb_urls and not status:
-                status, header = verify_user_agent(proc.stderr, expected, envname)
+                status, header = verify_user_agent(proc.stdout, expected, envname)
             if need_header:
                 if header:
                     print("|", header)
