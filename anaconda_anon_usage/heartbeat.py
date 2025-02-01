@@ -7,7 +7,6 @@ system configuration for better usage tracking.
 """
 
 import argparse
-import os
 import sys
 from threading import Thread
 from urllib.parse import urljoin
@@ -20,13 +19,18 @@ from . import utils
 
 VERBOSE = False
 STANDALONE = False
-DRY_RUN = os.environ.get("ANACONDA_HEARTBEAT_DRY_RUN")
 
 CLD_REPO = "https://repo.anaconda.cloud/"
 ORG_REPO = "https://conda.anaconda.org/"
 COM_REPO = "https://repo.anaconda.com/pkgs/"
 REPOS = (CLD_REPO, COM_REPO, ORG_REPO)
 HEARTBEAT_PATH = "noarch/activate-0.0.0-0.conda"
+# How long to attempt the connection. When a connection to our
+# repository is blocked or slow, a long timeout would lead to
+# a slow activation and a poor user experience. This is a total
+# timeout value, split between attempts and backoffs.
+TIMEOUT = 0.4
+RETRIES = 3
 
 
 def _print(msg, *args, standalone=False, error=False):
@@ -43,17 +47,20 @@ def _print(msg, *args, standalone=False, error=False):
     print(msg % args, file=ofile)
 
 
-def _ping(session, url, wait):
+def _ping(session, url, wait, timeout):
     try:
-        response = session.head(url, proxies=session.proxies)
+        # A short timeout is necessary here so that the activation
+        # is not unduly delayed by a blocked internet connection
+        response = session.head(url, proxies=session.proxies, timeout=timeout)
         _print("Status code (expect 404): %s", response.status_code)
     except Exception as exc:
         if type(exc).__name__ != "ConnectionError":
-            _print("Heartbeat error: %s", exc, error=True)
+            _print("Unexpected heartbeat error: %s", exc, error=True)
+        elif "timeout=" in str(exc):
+            _print("Timeout exceeded; heartbeat likely not sent.")
 
 
-def attempt_heartbeat(channel=None, path=None, wait=False):
-    global DRY_RUN
+def attempt_heartbeat(channel=None, path=None, wait=False, dry_run=False):
     line = "------------------------"
     _print(line, standalone=True)
     _print("anaconda-anon-usage heartbeat", standalone=True)
@@ -84,20 +91,25 @@ def attempt_heartbeat(channel=None, path=None, wait=False):
 
     _print("Heartbeat url: %s", url)
     _print("User agent: %s", context.user_agent)
-    if DRY_RUN:
+    if dry_run:
         _print("Dry run selected, not sending heartbeat.")
     else:
+        # No backoff is applied between the first and second attempts
+        n_blocks = RETRIES + 2 ** max(RETRIES - 2, 0) - 1
+        timeout = TIMEOUT / n_blocks
+        context.remote_max_retries = RETRIES
+        context.remote_backoff_factor = timeout
         session = get_session(url)
-        t = Thread(target=_ping, args=(session, url, wait), daemon=True)
+        # Run in the background so we can proceed with the rest of the
+        # activation tasks while the request fires. The process will wait
+        # to terminate until the thread is complete.
+        t = Thread(target=_ping, args=(session, url, wait, timeout), daemon=False)
         t.start()
-        _print("%saiting for response", "W" if wait else "Not w")
-        t.join(timeout=None if wait else 0.1)
     _print(line, standalone=True)
 
 
 def main():
     global VERBOSE
-    global DRY_RUN
     global STANDALONE
     p = argparse.ArgumentParser()
     p.add_argument("-c", "--channel", default=None)
@@ -108,8 +120,7 @@ def main():
     args = p.parse_args()
     STANDALONE = True
     VERBOSE = not args.quiet
-    DRY_RUN = args.dry_run
-    attempt_heartbeat(args.channel, args.path, args.wait)
+    attempt_heartbeat(args.channel, args.path, args.wait, args.dry_run)
 
 
 if __name__ == "__main__":

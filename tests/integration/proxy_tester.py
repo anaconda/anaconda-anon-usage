@@ -10,6 +10,7 @@ Arguments:
     --logfile, -l FILE    Write logs to FILE instead of stdout
     --port, -p PORT       Listen on PORT (default: 8080)
     --keep-certs          Keep certificates in current directory
+    --delay TIME          Emulate a connection delay of TIME seconds
     --return-code, -r N   Return status code N for all requests
     --return-header H     Add header H to responses (can repeat)
     --return-data DATA    Return DATA as response body
@@ -18,8 +19,8 @@ Examples:
     # Log all HTTPS requests to test.log:
     ./proxy_tester.py --logfile test.log -- curl https://httpbin.org/ip
 
-    # Return 404 for all requests:
-    ./proxy_tester.py --return-code 404 -- python my_script.py
+    # Return 404 for all requests, but with a half-second delay:
+    ./proxy_tester.py --return-code 404 --delay 0.5 -- python my_script.py
 
     # Return custom response with headers and body:
     ./proxy_tester.py --return-code 200 \\
@@ -190,8 +191,6 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
         super().__init__(*args, **kwargs)
         # Connection counter
         self.counter = 0
-        # Dictionary to store host certificates: hostname -> (cert_path, key_path)
-        self.host_certs = {}
         # Lock for single-threaded operations
         self.lock = Lock()
         # Interception settings
@@ -203,27 +202,22 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 class ProxyHandler(BaseHTTPRequestHandler):
 
-    def __init__(self, *args, **kwargs):
+    def setup(self):
         self.start_time = time.perf_counter()
-        self.cid = None
-        super().__init__(*args, **kwargs)
+        with self.server.lock:
+            self.server.counter += 1
+            self.cid = "%04d" % self.server.counter
+        super().setup()
 
     def log_message(self, format, *args):
         """Override to prevent access log messages from appearing on stderr"""
         pass
 
-    def _get_connection_id(self):
-        if self.cid is None:
-            with self.server.lock:
-                self.server.counter += 1
-                self.cid = "%04d" % self.server.counter
-        return self.cid
-
     def _log(self, *args, **kwargs):
         """Log message with elapsed time since first message for this connection ID"""
         level = kwargs.pop("level", "info")
         delta = time.perf_counter() - self.start_time
-        fmt = CONNECTION_FORMAT % (self._get_connection_id(), delta, args[0])
+        fmt = CONNECTION_FORMAT % (self.cid, delta, args[0])
         getattr(logger, level)(fmt, *args[1:], **kwargs)
 
     def _multiline_log(
@@ -253,7 +247,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             lines.append("<+ %d bytes>" % len(blob))
             blob = ""
         if direction:
-            lines[0] = f"[{direction}] {lines[0]}"
+            lines[0] = "[%s] %s" % (direction, lines[0])
         self._log("\n  | ".join(lines))
         return len(blob)
 
@@ -268,11 +262,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         remote = None
         client = None
+        error_code = 0
+        error_msg = None
 
         try:
             # Obtain MITM certificates for this host
             with self.server.lock:
                 cert_file, key_file = read_or_create_cert(host)
+
+            if self.server.delay:
+                self._log("Adding %gs connection delay", self.server.delay)
+                time.sleep(self.server.delay)
 
             # Establish tunnel
             self.send_response(200, "Connection Established")
@@ -281,10 +281,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
             )
             self.end_headers()
 
-            # Create SSL context with the host certificate
-            context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            context.load_cert_chain(cert_file, key_file)
-            client = context.wrap_socket(self.connection, server_side=True)
+            # Create SSL context for the client connection (MITM certificate)
+            client_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            client_context.load_cert_chain(cert_file, key_file)
+            client = client_context.wrap_socket(self.connection, server_side=True)
             self._log("[C<>P] SSL handshake completed")
 
             if self.server.intercept_mode:
@@ -307,21 +307,31 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self._multiline_log(response, direction="P->C", include_binary=True)
                 client.send(response)
             else:
-                # In MITM mode, forward all requests to the real server
+                # Create SSL context for the server connection (verify remote)
                 remote = socket.create_connection((host, int(port)))
-                context = ssl.create_default_context()
-                remote = context.wrap_socket(remote, server_hostname=host)
+                server_context = ssl.create_default_context()
+                remote = server_context.wrap_socket(remote, server_hostname=host)
                 self._log("[P<>S] SSL handshake completed")
+                # Forward all requests to the real server
                 self._forward_data(client, remote)
 
+        except ssl.SSLError as ssl_err:
+            self._log("SSL error: %s", ssl_err, level="error")
+            error_code, error_msg = 502, "SSL Handshake Failed"
+        except OSError as sock_err:
+            self._log("Socket error: %s", sock_err, level="error")
+            error_code, error_msg = 504, "Gateway Timeout"
         except Exception as exc:
-            self._log("CONNECT error: %s", exc, level="exception")
-            try:
-                self.send_error(502)
-            except Exception:
-                # If connection is already dead, sending error would raise socket.error
-                pass
+            self._log("CONNECT error: %s", exc, level="error")
+            error_code, error_msg = 502, "Proxy Error"
         finally:
+            if error_code:
+                try:
+                    self.send_error(error_code, error_msg)
+                except Exception:
+                    # If connection is already dead, sending an
+                    # error would raise socket.error
+                    pass
             self.close_connection = True
             if remote:
                 remote.close()
@@ -337,16 +347,22 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 data = source.recv(BUFFER_SIZE)
                 if not data:
                     return False, bcount
-                if bcount == 0:
-                    # First chunk contains headers; subsequent chunks may be binary
-                    ncount = self._multiline_log(data, direction=direction)
-                    bcount += ncount
-                else:
-                    bcount += len(data)
+            except (OSError, ssl.SSLError) as exc:
+                self._log("%s: Receive error: %s", direction, exc, level="error")
+                return False, bcount
+
+            if bcount == 0:
+                # First chunk contains headers; subsequent chunks may be binary
+                ncount = self._multiline_log(data, direction=direction)
+                bcount += ncount
+            else:
+                bcount += len(data)
+
+            try:
                 destination.sendall(data)
                 return True, bcount
             except Exception as exc:
-                self._log("%s: Forwarding error: %s", direction, exc, level="exception")
+                self._log("%s: Send error: %s", direction, exc, level="error")
                 return False, bcount
 
         # Track binary data for each direction separately
@@ -393,6 +409,13 @@ def main():
         type=int,
         default=8080,
         help="Port for the proxy server (default: 8080)",
+    )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        action="store",
+        default=0,
+        help="Add a delay, in seconds, to each connection request, to test connection issues.",
     )
     parser.add_argument(
         "--keep-certs",
@@ -442,6 +465,7 @@ def main():
 
     # Start and configure server
     server = ThreadingHTTPServer(("0.0.0.0", args.port), ProxyHandler)
+    server.delay = max(0, args.delay)
 
     # Enable interception if any response-related args are provided
     if (
