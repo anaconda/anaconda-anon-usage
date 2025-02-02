@@ -127,8 +127,7 @@ def main():
     _print(line)
 
     def environment_path(s):
-        if not os.path.isdir(s):
-            raise ValueError("Prefix not found")
+        assert os.path.isdir(s)
         return s
 
     def environment_name(s):

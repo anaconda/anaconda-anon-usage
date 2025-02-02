@@ -55,8 +55,7 @@ def _new_activate(self):
         env = self.env_name_or_prefix
         if env and os.sep not in env:
             env = locate_prefix_by_name(env)
-        Context.checked_prefix = env or sys.prefix
-        attempt_heartbeat()
+        attempt_heartbeat(env or sys.prefix)
     except Exception as exc:
         _debug("Failed to attempt heartbeat: %s", exc, error=True)
     finally:
