@@ -43,9 +43,8 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from os.path import isfile, join
-from socketserver import ThreadingMixIn
 from threading import Lock, Thread
 
 from cryptography import x509
@@ -58,7 +57,7 @@ BUFFER_SIZE = 65536
 # regex to find newlines in binary data
 BINARY_NEWLINE = re.compile(rb"\r?\n")
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
-CONNECTION_FORMAT = "[%s/%.3f] %s"  # cid, elapsed time, message
+CONNECTION_FORMAT = "[%s/%.3f/%.3f] %s"  # cid, split, elapsed, message
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +181,7 @@ def read_or_create_cert(host=None):
 #
 
 
-class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+class MyHTTPServer(ThreadingHTTPServer):
     """HTTPS proxy server with thread-per-connection handling"""
 
     daemon_threads = True
@@ -204,6 +203,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def setup(self):
         self.start_time = time.perf_counter()
+        self.last_time = self.start_time
         with self.server.lock:
             self.server.counter += 1
             self.cid = "%04d" % self.server.counter
@@ -216,9 +216,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _log(self, *args, **kwargs):
         """Log message with elapsed time since first message for this connection ID"""
         level = kwargs.pop("level", "info")
-        delta = time.perf_counter() - self.start_time
-        fmt = CONNECTION_FORMAT % (self.cid, delta, args[0])
+        n_time = (
+            self.start_time if kwargs.pop("noevent", False) else time.perf_counter()
+        )
+        d1 = n_time - self.last_time
+        d2 = n_time - self.start_time
+        fmt = CONNECTION_FORMAT % (self.cid, d1, d2, args[0])
         getattr(logger, level)(fmt, *args[1:], **kwargs)
+        self.last_time = n_time
 
     def _multiline_log(
         self, blob, firstline=None, direction=None, include_binary=False
@@ -271,8 +276,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 cert_file, key_file = read_or_create_cert(host)
 
             if self.server.delay:
-                self._log("Adding %gs connection delay", self.server.delay)
-                time.sleep(self.server.delay)
+                self._log("Enforcing %gs delay", self.server.delay)
+                current = self.last_time
+                finish = self.start_time + self.server.delay
+                while finish - current > 0.001:
+                    time.sleep(finish - current)
+                    current = time.perf_counter()
+                self._log("End of connection delay")
 
             # Establish tunnel
             self.send_response(200, "Connection Established")
@@ -464,7 +474,7 @@ def main():
     cert_path, key_path = read_or_create_cert()
 
     # Start and configure server
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), ProxyHandler)
+    server = MyHTTPServer(("0.0.0.0", args.port), ProxyHandler)
     server.delay = max(0, args.delay)
 
     # Enable interception if any response-related args are provided

@@ -119,7 +119,7 @@ for hval in ("true", "false", "delay"):
             # fmt: off
             cmd = ["python", pscript, "--return-code", "404"]
             if hval == "delay":
-                cmd.extend(["--delay", "1.0"])
+                cmd.extend(["--delay", "2.0"])
             cmd.extend(["--", "python", "-m", "conda", "shell." + stype, "activate", envname])
             # fmt: on
             proc = subprocess.run(
