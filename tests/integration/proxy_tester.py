@@ -216,9 +216,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _log(self, *args, **kwargs):
         """Log message with elapsed time since first message for this connection ID"""
         level = kwargs.pop("level", "info")
-        n_time = (
-            self.start_time if kwargs.pop("noevent", False) else time.perf_counter()
-        )
+        n_time = time.perf_counter()
         d1 = n_time - self.last_time
         d2 = n_time - self.start_time
         fmt = CONNECTION_FORMAT % (self.cid, d1, d2, args[0])
