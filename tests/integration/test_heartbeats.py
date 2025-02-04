@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+from os.path import dirname, join
 
 from conda.base.context import context
 from conda.models.channel import Channel
@@ -19,8 +20,6 @@ if os.path.isfile("/etc/conda/org_token"):
 if os.path.isfile("/etc/conda/machine_token"):
     expected += ("m",)
 
-os.environ["ANACONDA_ANON_USAGE_DEBUG"] = "1"
-os.environ["ANACONDA_HEARTBEAT_DRY_RUN"] = "1"
 
 ALL_FIELDS = {"aau", "aid", "c", "s", "e", "u", "h", "n", "m", "o", "U", "H", "N"}
 
@@ -48,23 +47,8 @@ all_session_tokens = set()
 all_environments = set()
 
 
-def verify_user_agent(output, expected, envname=None, marker=None):
-    # Unfortunately conda has evolved how it logs request headers
-    # So this regular expression attempts to match multiple forms
-    # > User-Agent: conda/...
-    # .... {'User-Agent': 'conda/...', ...}
+def verify_user_agent(user_agent, expected, envname=None, marker=None):
     other_tokens["n"] = envname if envname else "base"
-
-    user_agent = ""
-    marker = marker or "[uU]ser.[aA]gent"  # codespell:ignore
-    MATCH_RE = r".*" + marker + r'(["\']?): *(["\']?)(.+)'
-    for v in output.splitlines():
-        match = re.match(MATCH_RE, v)
-        if match:
-            _, delim, user_agent = match.groups()
-            if delim and delim in user_agent:
-                user_agent = user_agent.split(delim, 1)[0]
-            break
 
     new_values = [t.split("/", 1) for t in user_agent.split(" ") if "/" in t]
     new_values = {k: v for k, v in new_values if k in ALL_FIELDS}
@@ -110,25 +94,34 @@ print("-----------------")
 urls = [u for c in context.channels for u in Channel(c).urls()]
 urls.extend(u.rstrip("/") for u in context.channel_alias.urls())
 if any(".anaconda.cloud" in u for u in urls):
-    hb_url = "https://repo.anaconda.cloud/"
+    exp_host = "repo.anaconda.cloud:443"
 elif any(".anaconda.com" in u for u in urls):
-    hb_url = "https://repo.anaconda.com/"
+    exp_host = "repo.anaconda.com:443"
 elif any(".anaconda.org" in u for u in urls):
-    hb_url = "https://conda.anaconda.org/"
+    exp_host = "conda.anaconda.org:443"
 else:
-    hb_url = None
-if hb_url:
-    hb_url += "pkgs/main/noarch/activate-0.0.0-0.conda"
-print("Expected heartbeat url:", hb_url)
-print("Expected user agent tokens:", ",".join(expected))
+    raise RuntimeError("No heartbeat URL available.")
+exp_path = "/pkgs/main/noarch/activate-0.0.0-0.conda"
+print("Expected host:", exp_host)
+print("Expected path:", exp_path)
+print("Expected tokens:", ",".join(expected))
 need_header = True
-for hval in ("true", "false"):
-    os.environ["CONDA_ANACONDA_HEARTBEAT"] = hval
+for hval in ("true", "false", "delay"):
+    os.environ["CONDA_ANACONDA_HEARTBEAT"] = str(hval != "false").lower()
     for envname in envs:
         # Do each one twice to make sure the user agent string
         # remains correct on repeated attempts
         for stype in shells:
-            cmd = ["conda", "shell." + stype, "activate", envname]
+            # Using the proxy tester allows us to test this without the requests actually
+            # making it to repo.anaconda.com. The tester returns 404 for all requests. It
+            # also has the advantage of making sure our code respects proxies properly
+            pscript = join(dirname(__file__), "proxy_tester.py")
+            # fmt: off
+            cmd = ["python", pscript, "--return-code", "404"]
+            if hval == "delay":
+                cmd.extend(["--delay", "2.0"])
+            cmd.extend(["--", "python", "-m", "conda", "shell." + stype, "activate", envname])
+            # fmt: on
             proc = subprocess.run(
                 cmd,
                 check=False,
@@ -136,26 +129,22 @@ for hval in ("true", "false"):
                 text=True,
             )
             header = status = ""
-            no_hb_url = "No valid heartbeat channel" in proc.stderr
-            hb_urls = {
-                line.rsplit(" ", 1)[-1]
-                for line in proc.stderr.splitlines()
-                if "Heartbeat url:" in line
-            }
-            status = ""
-            if hval == "true":
-                if not (no_hb_url or hb_urls):
-                    status = "NOT ENABLED"
-                elif hb_url and not hb_urls:
-                    status = "NO HEARTBEAT URL"
-                elif not hb_url and hb_urls:
-                    status = "UNEXPECTED URLS: " + ",".join(hb_urls)
-                elif hb_url and any(hb_url not in u for u in hb_urls):
-                    status = "INCORRECT URLS: " + ",".join(hb_urls)
-            elif hval == "false" and (no_hb_url or hb_urls):
+            t_host = re.search(r"^.* CONNECT (.*) HTTP/1.1$", proc.stdout, re.MULTILINE)
+            t_host = t_host.groups()[0] if t_host else ""
+            t_path = re.search(r"^.* HEAD (.*) HTTP/1.1$", proc.stdout, re.MULTILINE)
+            t_path = t_path.groups()[0] if t_path else ""
+            t_uagent = re.search(r"^  . User-Agent: (.*)", proc.stdout, re.MULTILINE)
+            t_uagent = t_uagent.groups()[0] if t_uagent else ""
+            if hval != "false" and not t_host:
+                status = "NOT ENABLED"
+            elif hval == "false" and t_host:
                 status = "NOT DISABLED"
-            if hb_urls and not status:
-                status, header = verify_user_agent(proc.stderr, expected, envname)
+            elif hval == "delay" and t_path:
+                status = "TIMEOUT FAILED"
+            elif t_host and t_path and (t_host != exp_host or t_path != exp_path):
+                status = f"INCORRECT URL: {t_host}{t_path}"
+            if not status and hval == "true":
+                status, header = verify_user_agent(t_uagent, expected, envname)
             if need_header:
                 if header:
                     print("|", header)

@@ -3,7 +3,7 @@ import os
 import re
 import subprocess
 import sys
-from os.path import basename, expanduser, isfile, join
+from os.path import basename, dirname, expanduser, isfile, join
 
 from anaconda_anon_usage import tokens as m_tokens
 
@@ -85,10 +85,15 @@ for ctype in ("env", "cfg"):
         if mode == "default" and ctype == "env":
             continue
         enabled = _config(mode, ctype)
-        # Make sure to leave override-channels and the full channel URL in here.
-        # This allows this command to run fully no matter what we do to channel_alias
-        # and default_channels
-        cmd = ["conda", "install", "-vvv", "fakepackage"]
+        # Using the proxy tester allows us to test this without the requests actually
+        # making it to repo.anaconda.com. The tester returns 404 for all requests. It
+        # also has the advantage of making sure our code respects proxies properly
+        pscript = join(dirname(__file__), "proxy_tester.py")
+        # fmt: off
+        cmd = ["python", pscript, "--return-code", "404", "--",
+               "python", "-m", "conda", "install", "--override-channels",
+               "-c", "defaults", "fakepackage"]
+        # fmt: on
         if envname:
             cmd.extend(["-n", envname])
         skip = False
@@ -98,18 +103,8 @@ for ctype in ("env", "cfg"):
             capture_output=True,
             text=True,
         )
-        user_agent = ""
-        for v in proc.stderr.splitlines():
-            # Unfortunately conda has evolved how it logs request headers
-            # So this regular expression attempts to match multiple forms
-            # > User-Agent: conda/...
-            # .... {'User-Agent': 'conda/...', ...}
-            match = re.match(r'.*User-Agent(["\']?): *(["\']?)(.+)', v)
-            if match:
-                _, delim, user_agent = match.groups()
-                if delim and delim in user_agent:
-                    user_agent = user_agent.split(delim, 1)[0]
-                break
+        match = re.search(r"^.*User-Agent: (.+)$", proc.stdout, re.MULTILINE)
+        user_agent = match.groups()[0] if match else ""
         if first:
             if user_agent:
                 print(user_agent)
