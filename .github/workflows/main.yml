@@ -52,8 +52,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # ubuntu-latest runs on x86_64, ubuntu-24.04-arm on arm64
         # macos-13 defaults to osx-64, macos-14 defaults to osx-arm64
-        os: [ubuntu-latest, macos-13, macos-14, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
         # 23.5.2 : last patch-based variant
         # 23.7.0 : first plugin-based variant, but conda info --envs --json is broken
         # 23.9.0 : last variant with the classic default solver
