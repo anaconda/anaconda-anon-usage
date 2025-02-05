@@ -2,7 +2,7 @@
 #   Check out the docs at: https://pre-commit.com/
 
 default_stages: [commit]
-exclude: versioneer.py|anaconda_anon_usage/_version.py
+exclude: versioneer.py|anaconda_anon_usage/_version.py|tests/integration/proxy_tester.py
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
