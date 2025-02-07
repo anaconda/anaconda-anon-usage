@@ -36,6 +36,7 @@ test:
     - conda
     - pytest
     - pytest-cov
+    - conda-forge::proxyspy
   source_files:
     - tests
   commands:
