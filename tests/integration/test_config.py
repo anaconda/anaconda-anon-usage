@@ -3,7 +3,7 @@ import os
 import re
 import subprocess
 import sys
-from os.path import basename, dirname, expanduser, isfile, join
+from os.path import basename, expanduser, isfile, join
 
 from anaconda_anon_usage import tokens as m_tokens
 

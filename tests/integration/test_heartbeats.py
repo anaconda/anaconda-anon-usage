@@ -3,7 +3,6 @@ import os
 import re
 import subprocess
 import sys
-from os.path import dirname, join
 
 from conda.base.context import context
 from conda.models.channel import Channel
