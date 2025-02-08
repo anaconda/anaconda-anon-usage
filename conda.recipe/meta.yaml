@@ -33,21 +33,15 @@ requirements:
 
 test:
   requires:
+    - pip
     - conda
-    - pytest
-    - pytest-cov
-  source_files:
-    - tests
+  imports:
+    - anaconda_anon_usage
+    - anaconda_anon_usage.patch
+    - anaconda_anon_usage.tokens
   commands:
-    - export ANACONDA_ANON_USAGE_DEBUG=1
-    - export PYTHONUNBUFFERED=1
-    - conda create -n testchild1 --yes
-    - conda create -n testchild2 --yes
-    - conda info
-    - conda info --envs
-    - python -m anaconda_anon_usage.install --status  # [variant=="patch"]
-    - pytest -v tests/unit
-    - python tests/integration/test_config.py
+    - pip check
+    - conda info | grep -q "user-agent.* aau/"
 
 about:
   home: https://github.com/Anaconda-Platform/anaconda-anon-usage

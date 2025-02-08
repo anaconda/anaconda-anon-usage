@@ -3,7 +3,6 @@ import os
 import re
 import subprocess
 import sys
-from os.path import dirname, join
 
 from conda.base.context import context
 from conda.models.channel import Channel
@@ -112,15 +111,14 @@ for hval in ("true", "false", "delay"):
         # Do each one twice to make sure the user agent string
         # remains correct on repeated attempts
         for stype in shells:
-            # Using the proxy tester allows us to test this without the requests actually
-            # making it to repo.anaconda.com. The tester returns 404 for all requests. It
-            # also has the advantage of making sure our code respects proxies properly
-            pscript = join(dirname(__file__), "proxy_tester.py")
+            # Using proxyspy allows us to test this without the requests actually
+            # making it to repo.anaconda.com. The tester returns 404 for all requests.
+            # It also has the advantage of making sure our code respects proxies
             # fmt: off
-            cmd = ["python", pscript, "--return-code", "404"]
+            cmd = ["proxyspy", "--return-code", "404"]
             if hval == "delay":
                 cmd.extend(["--delay", "2.0"])
-            cmd.extend(["--", "python", "-m", "conda", "shell." + stype, "activate", envname])
+            cmd.extend(["--", "conda", "shell." + stype, "activate", envname])
             # fmt: on
             proc = subprocess.run(
                 cmd,

@@ -3,7 +3,7 @@ import os
 import re
 import subprocess
 import sys
-from os.path import basename, dirname, expanduser, isfile, join
+from os.path import basename, expanduser, isfile, join
 
 from anaconda_anon_usage import tokens as m_tokens
 
@@ -85,13 +85,12 @@ for ctype in ("env", "cfg"):
         if mode == "default" and ctype == "env":
             continue
         enabled = _config(mode, ctype)
-        # Using the proxy tester allows us to test this without the requests actually
-        # making it to repo.anaconda.com. The tester returns 404 for all requests. It
-        # also has the advantage of making sure our code respects proxies properly
-        pscript = join(dirname(__file__), "proxy_tester.py")
+        # Using proxyspy allows us to test this without the requests actually
+        # making it to repo.anaconda.com. The tester returns 404 for all requests.
+        # It also has the advantage of making sure our code respects proxies
         # fmt: off
-        cmd = ["python", pscript, "--return-code", "404", "--",
-               "python", "-m", "conda", "install", "--override-channels",
+        cmd = ["proxyspy", "--return-code", "404", "--",
+               "conda", "install", "--override-channels",
                "-c", "defaults", "fakepackage"]
         # fmt: on
         if envname:

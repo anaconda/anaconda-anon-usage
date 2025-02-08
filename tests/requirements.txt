@@ -1,3 +1,3 @@
 pytest
 pytest-cov
-cryptography
+conda-forge::proxyspy
