@@ -30,6 +30,8 @@ READ_CHAOS = os.environ.get("ANACONDA_ANON_USAGE_READ_CHAOS") or ""
 # Causes token writes to fail (for testing). The string should contain
 # the token types that should fail; c, e
 WRITE_CHAOS = os.environ.get("ANACONDA_ANON_USAGE_WRITE_CHAOS") or ""
+# Causes token writes to include a trailing newline (for testing).
+WRITE_NEWLINE = False
 
 WRITE_SUCCESS = 0
 WRITE_DEFER = 1
@@ -116,6 +118,8 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
         if emulate_fail:
             raise OSError(errno.EROFS, "Testing permissions issues")
         os.makedirs(dirname(fpath), exist_ok=True)
+        if WRITE_NEWLINE:
+            client_token = client_token + "\n# Test comment"
         with open(fpath, "w") as fp:
             fp.write(client_token)
         _debug("Token saved: %s", fpath)
@@ -156,7 +160,7 @@ def _deferred_exists(
             return token
 
 
-def _read_file(fpath, what, must_exist=None, read_only=False, single_line=False):
+def _read_file(fpath, what, read_only=False, single_line=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
