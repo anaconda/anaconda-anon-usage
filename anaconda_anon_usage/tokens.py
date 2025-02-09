@@ -104,7 +104,7 @@ def _system_token(fname, what):
         fpath = join(path, fname)
         if not isfile(fpath):
             continue
-        t_tokens = _read_file(fpath, what + "token")
+        t_tokens = _read_file(fpath, what + "token", single_line=True)
         if t_tokens:
             for token in t_tokens.split("/"):
                 if token not in tokens:

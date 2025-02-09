@@ -156,7 +156,7 @@ def _deferred_exists(
             return token
 
 
-def _read_file(fpath, what, must_exist=None, read_only=False):
+def _read_file(fpath, what, must_exist=None, read_only=False, single_line=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
@@ -178,9 +178,13 @@ def _read_file(fpath, what, must_exist=None, read_only=False):
         _debug("%s file is not present", what)
     else:
         try:
-            # Use just the first line of the file, if it exists
             with open(fpath) as fp:
                 data = fp.read()
+            if single_line:
+                # Use just the first non-blank line of the file
+                data = data.strip()
+                if data:
+                    data = data.splitlines()[0]
             _debug("Retrieved %s: %s", what, data)
             return data
         except Exception as exc:
@@ -196,9 +200,7 @@ def _saved_token(fpath, what, must_exist=None, read_only=False):
     """
     global DEFERRED
     what = what + " token"
-    client_token = _read_file(fpath, what) or ""
-    # Just use the first line of the file
-    client_token = "".join(client_token.splitlines()[:1])
+    client_token = _read_file(fpath, what, single_line=True) or ""
     if not read_only and len(client_token) < TOKEN_LENGTH:
         if len(client_token) > 0:
             _debug("Generating longer %s", what)
