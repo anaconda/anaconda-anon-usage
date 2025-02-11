@@ -43,9 +43,9 @@ def system_tokens():
         otoken = utils._random_token()
         mtoken = utils._random_token()
         with open(dirname(tpaths[1]) + "/org_token", "w") as fp:
-            fp.write(otoken)
+            fp.write(otoken + "\n# Anaconda organization token\n")
         with open(dirname(tpaths[1]) + "/machine_token", "w") as fp:
-            fp.write(mtoken)
+            fp.write(mtoken + "\n# Anaconda machine token\n")
         yield (otoken, mtoken)
 
 

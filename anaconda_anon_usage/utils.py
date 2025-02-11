@@ -30,6 +30,8 @@ READ_CHAOS = os.environ.get("ANACONDA_ANON_USAGE_READ_CHAOS") or ""
 # Causes token writes to fail (for testing). The string should contain
 # the token types that should fail; c, e
 WRITE_CHAOS = os.environ.get("ANACONDA_ANON_USAGE_WRITE_CHAOS") or ""
+# Causes token writes to include a trailing newline (for testing).
+WRITE_NEWLINE = False
 
 WRITE_SUCCESS = 0
 WRITE_DEFER = 1
@@ -116,6 +118,8 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
         if emulate_fail:
             raise OSError(errno.EROFS, "Testing permissions issues")
         os.makedirs(dirname(fpath), exist_ok=True)
+        if WRITE_NEWLINE:
+            client_token = client_token + "\n# Test comment"
         with open(fpath, "w") as fp:
             fp.write(client_token)
         _debug("Token saved: %s", fpath)
@@ -156,7 +160,7 @@ def _deferred_exists(
             return token
 
 
-def _read_file(fpath, what, must_exist=None, read_only=False):
+def _read_file(fpath, what, read_only=False, single_line=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
@@ -178,9 +182,13 @@ def _read_file(fpath, what, must_exist=None, read_only=False):
         _debug("%s file is not present", what)
     else:
         try:
-            # Use just the first line of the file, if it exists
             with open(fpath) as fp:
                 data = fp.read()
+            if single_line:
+                # Use just the first non-blank line of the file
+                data = data.strip()
+                if data:
+                    data = data.splitlines()[0]
             _debug("Retrieved %s: %s", what, data)
             return data
         except Exception as exc:
@@ -196,9 +204,7 @@ def _saved_token(fpath, what, must_exist=None, read_only=False):
     """
     global DEFERRED
     what = what + " token"
-    client_token = _read_file(fpath, what) or ""
-    # Just use the first line of the file
-    client_token = "".join(client_token.splitlines()[:1])
+    client_token = _read_file(fpath, what, single_line=True) or ""
     if not read_only and len(client_token) < TOKEN_LENGTH:
         if len(client_token) > 0:
             _debug("Generating longer %s", what)

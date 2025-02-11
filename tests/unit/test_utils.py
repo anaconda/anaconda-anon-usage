@@ -25,11 +25,23 @@ def test_random_token():
 def test_saved_token_saving(tmpdir):
     token_path = tmpdir.join("aau_token")
     token_saved = utils._saved_token(token_path, "test")
-    assert exists(token_path)
-    with open(token_path) as token_file:
-        token_stored = token_file.read()
-        assert len(token_stored) == 22
-        assert token_stored == token_saved
+    assert len(token_saved) == 22
+    token_stored = utils._read_file(token_path, "test", read_only=True)
+    assert token_stored and token_stored == token_saved
+
+
+def test_saved_token_newline(monkeypatch, tmpdir):
+    monkeypatch.setattr(utils, "WRITE_NEWLINE", True)
+    token_path = tmpdir.join("aau_token")
+    token_saved = utils._saved_token(token_path, "test")
+    assert len(token_saved) == 22
+    token_stored = utils._read_file(token_path, "test", read_only=True)
+    assert token_stored and token_stored != token_saved
+    assert token_stored.splitlines()[0] == token_saved
+    token_stored = utils._read_file(
+        token_path, "test", read_only=True, single_line=True
+    )
+    assert token_stored and token_stored == token_saved
 
 
 def test_saved_token_exception(tmpdir):

@@ -1,3 +1,5 @@
+import re
+
 from conda.base.context import context
 
 from anaconda_anon_usage import patch, tokens
@@ -11,6 +13,7 @@ ALL = BASIC | OPTIONAL
 def _assert_has_expected_tokens(must=BASIC, mustnot=()):
     patch.main(plugin=True)
     assert context.user_agent is not None
+    assert re.match(r"^[A-Za-z0-9\-_.~!#$&'()*+,/:;=?@[\] ]+$", context.user_agent)
     tokens = {
         tok.split("/", 1)[0] for tok in context.user_agent.split(" ") if "/" in tok
     }
