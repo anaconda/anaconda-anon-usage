@@ -167,4 +167,5 @@ jobs:
         source $CONDA/bin/activate
         conda install anaconda-client
         [[ "$GITHUB_REF" =~ ^refs/tags/ ]] || export LABEL="--label dev"
-        anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL conda-bld/*/*.{conda,tar.bz2} --force
+        packages=$(ls -1 conda-bld/*/*.{tar.bz2,conda} 2>/dev/null || :)
+        anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL $packages --force
