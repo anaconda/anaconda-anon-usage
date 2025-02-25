@@ -115,7 +115,7 @@ def _system_tokens(fname, what):
 @cached
 def organization_tokens():
     """
-    Returns the organization token.
+    Returns the list of organization tokens.
     """
     return _system_tokens(ORG_TOKEN_NAME, "organization")
 
@@ -123,7 +123,7 @@ def organization_tokens():
 @cached
 def machine_tokens():
     """
-    Returns the machine token.
+    Returns the list of machine tokens.
     """
     return _system_tokens(MACHINE_TOKEN_NAME, "machine")
 
@@ -222,6 +222,10 @@ def token_string(prefix=None, enabled=True):
             parts.append("e/" + values.environment)
         if values.anaconda_cloud:
             parts.append("a/" + values.anaconda_cloud)
+        # Organization and machine tokens can potentially be
+        # multi-valued, and this is rendered in the user agent
+        # string as multiple instances separated by spaces. This
+        # was chosen to facilitate easier filtering & search
         if values.organization:
             parts.extend("o/" + t for t in values.organization)
         if values.machine:
