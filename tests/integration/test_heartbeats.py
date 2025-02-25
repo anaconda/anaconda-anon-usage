@@ -105,6 +105,7 @@ print("Expected host:", exp_host)
 print("Expected path:", exp_path)
 print("Expected tokens:", ",".join(expected))
 need_header = True
+port = 8080
 for hval in ("true", "false", "delay"):
     os.environ["CONDA_ANACONDA_HEARTBEAT"] = str(hval != "false").lower()
     for envname in envs:
@@ -115,10 +116,10 @@ for hval in ("true", "false", "delay"):
             # making it to repo.anaconda.com. The tester returns 404 for all requests.
             # It also has the advantage of making sure our code respects proxies
             # fmt: off
-            cmd = ["proxyspy", "--return-code", "404"]
-            if hval == "delay":
-                cmd.extend(["--delay", "2.0"])
+            cmd = ["proxyspy", "--port", str(port), "--return-code", "404"]
+            cmd.extend(["--delay", "2.0" if hval == "delay" else "0.1"])
             cmd.extend(["--", "conda", "shell." + stype, "activate", envname])
+            port += 1
             # fmt: on
             proc = subprocess.run(
                 cmd,
@@ -152,6 +153,9 @@ for hval in ("true", "false", "delay"):
             print(f"{hval:5} {stype:10} {envname:{maxlen}} {status or 'OK'}")
             if status:
                 print("|", " ".join(cmd))
+                for line in proc.stdout.splitlines():
+                    if line.strip():
+                        print(">", line)
                 for line in proc.stderr.splitlines():
                     if line.strip():
                         print("!", line)
