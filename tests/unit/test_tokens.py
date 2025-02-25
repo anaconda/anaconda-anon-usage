@@ -44,6 +44,16 @@ def test_token_string_with_system(system_tokens):
     token_string = tokens.token_string()
     assert "o/" + org_token in token_string
     assert "m/" + mch_token in token_string
+    assert token_string.count(" o/") == 1
+
+
+def test_token_string_with_two_org_tokens(two_org_tokens):
+    org_token, mch_token, org_token2 = two_org_tokens
+    token_string = tokens.token_string()
+    assert "o/" + org_token in token_string
+    assert "m/" + mch_token in token_string
+    assert "o/" + org_token2 in token_string
+    assert token_string.count(" o/") == 2
 
 
 def test_token_string_no_client_token(monkeypatch, no_system_tokens):
