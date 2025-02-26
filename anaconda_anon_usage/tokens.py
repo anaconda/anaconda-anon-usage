@@ -109,6 +109,8 @@ def _system_tokens(fname, what):
             for token in t_tokens.split("/"):
                 if token not in tokens:
                     tokens.append(token)
+    if not tokens:
+        _debug("No %s tokens found", what)
     return tokens
 
 
