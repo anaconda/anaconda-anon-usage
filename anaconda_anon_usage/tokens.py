@@ -91,7 +91,7 @@ def _search_path():
     return result
 
 
-def _system_token(fname, what):
+def _system_tokens(fname, what):
     """
     Returns an organization or machine token installed somewhere
     in the conda path. Unlike most tokens, these will typically
@@ -104,30 +104,30 @@ def _system_token(fname, what):
         fpath = join(path, fname)
         if not isfile(fpath):
             continue
-        t_tokens = _read_file(fpath, what + "token", single_line=True)
+        t_tokens = _read_file(fpath, what + " token", single_line=True)
         if t_tokens:
             for token in t_tokens.split("/"):
                 if token not in tokens:
                     tokens.append(token)
-    if tokens:
-        return "/".join(tokens)
-    _debug("No %s tokens found", what)
+    if not tokens:
+        _debug("No %s tokens found", what)
+    return tokens
 
 
 @cached
-def organization_token():
+def organization_tokens():
     """
-    Returns the organization token.
+    Returns the list of organization tokens.
     """
-    return _system_token(ORG_TOKEN_NAME, "organization")
+    return _system_tokens(ORG_TOKEN_NAME, "organization")
 
 
 @cached
-def machine_token():
+def machine_tokens():
     """
-    Returns the machine token.
+    Returns the list of machine tokens.
     """
-    return _system_token(MACHINE_TOKEN_NAME, "machine")
+    return _system_tokens(MACHINE_TOKEN_NAME, "machine")
 
 
 @cached
@@ -202,8 +202,8 @@ def all_tokens(prefix=None):
         session_token(),
         environment_token(prefix),
         anaconda_cloud_token(),
-        organization_token(),
-        machine_token(),
+        organization_tokens(),
+        machine_tokens(),
     )
 
 
@@ -224,10 +224,14 @@ def token_string(prefix=None, enabled=True):
             parts.append("e/" + values.environment)
         if values.anaconda_cloud:
             parts.append("a/" + values.anaconda_cloud)
+        # Organization and machine tokens can potentially be
+        # multi-valued, and this is rendered in the user agent
+        # string as multiple instances separated by spaces. This
+        # was chosen to facilitate easier filtering & search
         if values.organization:
-            parts.append("o/" + values.organization)
+            parts.extend("o/" + t for t in values.organization)
         if values.machine:
-            parts.append("m/" + values.machine)
+            parts.extend("m/" + t for t in values.machine)
     else:
         _debug("anaconda_anon_usage disabled by config")
     result = " ".join(parts)

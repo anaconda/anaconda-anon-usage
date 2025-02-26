@@ -116,8 +116,7 @@ for hval in ("true", "false", "delay"):
             # It also has the advantage of making sure our code respects proxies
             # fmt: off
             cmd = ["proxyspy", "--return-code", "404"]
-            if hval == "delay":
-                cmd.extend(["--delay", "2.0"])
+            cmd.extend(["--delay", "2.0" if hval == "delay" else "0.1"])
             cmd.extend(["--", "conda", "shell." + stype, "activate", envname])
             # fmt: on
             proc = subprocess.run(
@@ -152,6 +151,9 @@ for hval in ("true", "false", "delay"):
             print(f"{hval:5} {stype:10} {envname:{maxlen}} {status or 'OK'}")
             if status:
                 print("|", " ".join(cmd))
+                for line in proc.stdout.splitlines():
+                    if line.strip():
+                        print(">", line)
                 for line in proc.stderr.splitlines():
                     if line.strip():
                         print("!", line)

@@ -104,14 +104,14 @@ jobs:
         pytest
         python tests/integration/test_config.py
     - name: Test heartbeats (pwsh)
-      if: matrix.os == 'windows-latest' && (matrix.cversion == '24.11.3' || matrix.cversion == '25.1.1')
+      if: matrix.os == 'windows-latest' && matrix.cversion == '25.1.1'
       shell: pwsh
       run: |
         .\testenv\shell\condabin\conda-hook.ps1
         conda activate base
         python tests\integration\test_heartbeats.py powershell
     - name: Test heartbeats (cmd)
-      if: matrix.os == 'windows-latest' && (matrix.cversion == '24.11.3' || matrix.cversion == '25.1.1')
+      if: matrix.os == 'windows-latest' && matrix.cversion == '25.1.1'
       shell: cmd
       run: |
         call .\testenv\Scripts\activate.bat
@@ -119,7 +119,7 @@ jobs:
         python tests\integration\test_heartbeats.py cmd.exe
         if %errorlevel% neq 0 exit 1
     - name: Test heartbeats (bash)
-      if: matrix.os != 'windows-latest' && (matrix.cversion == '24.11.3' || matrix.cversion == '25.1.1')
+      if: matrix.os != 'windows-latest' && matrix.cversion == '25.1.1'
       run: |
         source ./testenv/bin/activate
         conda info

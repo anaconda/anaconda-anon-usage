@@ -46,10 +46,11 @@ def _config(value, ctype):
 all_modes = ["true", "false", "yes", "no", "on", "off", "default"]
 yes_modes = ("true", "yes", "on", "default")
 all_tokens = {"aau", "c", "s", "e"}
+multi_tokens = {"o", "m"}
 aau_only = {"aau"}
-if m_tokens.organization_token():
+if m_tokens.organization_tokens():
     all_tokens.add("o")
-if m_tokens.machine_token():
+if m_tokens.machine_tokens():
     all_tokens.add("m")
 if m_tokens.anaconda_cloud_token():
     all_tokens.add("a")
@@ -122,8 +123,12 @@ for ctype in ("env", "cfg"):
             if FAST_EXIT:
                 break
             continue
-        tokens = dict(t.split("/", 1) for t in user_agent.split())
-        tokens = {k: v for k, v in tokens.items() if k in all_tokens}
+        tokens = {}
+        for tok in user_agent.split():
+            if "/" in tok:
+                k, v = tok.split("/", 1)
+                if k in all_tokens:
+                    tokens.setdefault(k, []).append(v)
         status = []
         expected = all_tokens if enabled else aau_only
         missing = expected - set(tokens)
@@ -134,7 +139,13 @@ for ctype in ("env", "cfg"):
             status.append(f"NOT CLEARED: {'/'.join(extras)}")
         modified = []
         duplicated = []
+        repeated = []
         for k, v in tokens.items():
+            if k not in multi_tokens:
+                if len(v) > 1:
+                    repeated.append(k)
+                    continue
+                v = v[0]
             if k == "s":
                 if v in all_sessions:
                     duplicated.append("s")
@@ -146,7 +157,9 @@ for ctype in ("env", "cfg"):
                     duplicated.append("e")
                 all_environments.add(v)
             if other_tokens.setdefault(k, v) != v:
-                modified.append(k.split("/")[0])
+                modified.append(k)
+        if repeated:
+            status.append(f"REPEATED: {','.join(repeated)}")
         if duplicated:
             status.append(f"DUPLICATED: {','.join(duplicated)}")
         if modified:
