@@ -116,7 +116,10 @@ for hval in ("true", "false", "delay"):
             # It also has the advantage of making sure our code respects proxies
             # fmt: off
             cmd = ["proxyspy", "--return-code", "404"]
-            cmd.extend(["--delay", "2.0" if hval == "delay" else "0.1"])
+            cmd.extend(("--prepare-host", "repo.anaconda.com"))
+            cmd.extend(("--prepare-host", "conda.anaconda.org"))
+            if hval == "delay":
+                cmd.extend(["--delay", "2.0"])
             cmd.extend(["--", "conda", "shell." + stype, "activate", envname])
             # fmt: on
             proc = subprocess.run(
