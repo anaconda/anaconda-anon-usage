@@ -47,15 +47,19 @@ def _new_get_main_info_str(info_dict):
 
 
 def _new_activate(self):
-    if not context.anaconda_heartbeat:
+    hb = context.anaconda_heartbeat
+    if not hb:
         return self._old_activate()
     try:
         from .heartbeat import attempt_heartbeat
 
+        channel, path = None, None
         env = self.env_name_or_prefix
         if env and os.sep not in env:
             env = locate_prefix_by_name(env)
-        attempt_heartbeat(env or sys.prefix)
+        if isinstance(hb, str):
+            channel, path = hb, ""
+        attempt_heartbeat(env or sys.prefix, channel=channel, path=path)
     except Exception as exc:
         _debug("Failed to attempt heartbeat: %s", exc, error=True)
     finally:
@@ -104,6 +108,15 @@ def _patch_activate():
     _debug("Cannot apply anaconda_anon_usage activate patch")
 
 
+def _heartbeat_validate(value):
+    if isinstance(value, str):
+        from urllib import parse
+
+        parts = parse.urlsplit(value)
+        if not (parts.scheme and parts.netloc):
+            return "Must be a booelan or a full URL"
+
+
 def main(plugin=False, command=None):
     if getattr(context, "_aau_initialized", None) is not None:
         _debug("anaconda_anon_usage already active")
@@ -125,7 +138,11 @@ def main(plugin=False, command=None):
 
     # conda.base.context.Context
     # Adds the anaconda_heartbeat toggle, defaulting to false
-    _param = ParameterLoader(PrimitiveParameter(False))
+    _param = ParameterLoader(
+        PrimitiveParameter(
+            False, element_type=(str, bool), validation=_heartbeat_validate
+        )
+    )
     Context.anaconda_heartbeat = _param
     Context.parameter_names += (_param._set_name("anaconda_heartbeat"),)
 

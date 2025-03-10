@@ -101,12 +101,17 @@ elif any(".anaconda.org" in u for u in urls):
 else:
     raise RuntimeError("No heartbeat URL available.")
 exp_path = "/pkgs/main/noarch/activate-0.0.0-0.conda"
+alt_host = "test.url.com"
+alt_path = "/test/path"
+alt_url = f"https://{alt_host}{alt_path}"
 print("Expected host:", exp_host)
 print("Expected path:", exp_path)
 print("Expected tokens:", ",".join(expected))
 need_header = True
-for hval in ("true", "false", "delay"):
-    os.environ["CONDA_ANACONDA_HEARTBEAT"] = str(hval != "false").lower()
+for hval in ("true", "false", "alturl", "delay"):
+    is_alt = hval == "alturl"
+    hbval = alt_url if is_alt else str(hval != "false").lower()
+    os.environ["CONDA_ANACONDA_HEARTBEAT"] = hbval
     for envname in envs:
         # Do each one twice to make sure the user agent string
         # remains correct on repeated attempts
@@ -118,6 +123,7 @@ for hval in ("true", "false", "delay"):
             cmd = ["proxyspy", "--return-code", "404"]
             cmd.extend(("--prepare-host", "repo.anaconda.com"))
             cmd.extend(("--prepare-host", "conda.anaconda.org"))
+            cmd.extend(("--prepare-host", alt_host))
             if hval == "delay":
                 cmd.extend(["--delay", "2.0"])
             cmd.extend(["--", "conda", "shell." + stype, "activate", envname])
@@ -135,13 +141,15 @@ for hval in ("true", "false", "delay"):
             t_path = t_path.groups()[0] if t_path else ""
             t_uagent = re.search(r"^  . User-Agent: (.*)", proc.stdout, re.MULTILINE)
             t_uagent = t_uagent.groups()[0] if t_uagent else ""
+            te_host = alt_host + ":443" if is_alt else exp_host
+            te_path = alt_path if is_alt else exp_path
             if hval != "false" and not t_host:
                 status = "NOT ENABLED"
             elif hval == "false" and t_host:
                 status = "NOT DISABLED"
             elif hval == "delay" and t_path:
                 status = "TIMEOUT FAILED"
-            elif t_host and t_path and (t_host != exp_host or t_path != exp_path):
+            elif t_host and t_path and (t_host != te_host or t_path != te_path):
                 status = f"INCORRECT URL: {t_host}{t_path}"
             if not status and hval == "true":
                 status, header = verify_user_agent(t_uagent, expected, envname)

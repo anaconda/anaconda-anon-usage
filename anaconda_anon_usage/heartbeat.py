@@ -87,7 +87,9 @@ def attempt_heartbeat(prefix=None, dry_run=False, channel=None, path=None):
             _print("No valid heartbeat channel")
             return
         url = urljoin(base, channel or "main") + "/"
-    url = urljoin(url, path or HEARTBEAT_PATH)
+    if path is None:
+        path = HEARTBEAT_PATH
+    url = urljoin(url, path)
 
     _print("Heartbeat url: %s", url)
     if prefix:
