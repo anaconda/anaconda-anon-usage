@@ -63,10 +63,13 @@ def cached(func):
 
 def _cache_clear(*args):
     global CACHE
+    global __nodestr
     if not args:
         CACHE.clear()
     else:
         CACHE = {k: v for k, v in CACHE.items() if k[0] not in args}
+    if "client_token" not in CACHE:
+        uuid._node = __nodestr = None
 
 
 def _debug(s, *args, error=False):

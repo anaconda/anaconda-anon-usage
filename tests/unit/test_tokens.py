@@ -20,6 +20,9 @@ def test_client_token_add_hostid(aau_token_path):
         token3 = fp.read()
     assert token3.split(" ", 1)[0] == token2, (token2, token3)
     assert token3.split(" ", 1)[1] == utils._get_node_str(), token3
+    utils._cache_clear()
+    token4 = tokens.client_token()
+    assert token4 == token2, (token2, token4)
 
 
 def test_client_token_replace_hostid(aau_token_path):
@@ -33,6 +36,9 @@ def test_client_token_replace_hostid(aau_token_path):
         token3 = fp.read()
     assert token3.split(" ", 1)[0] == token2, (token2, token3)
     assert token3.split(" ", 1)[1] == utils._get_node_str(), token3
+    utils._cache_clear()
+    token4 = tokens.client_token()
+    assert token4 == token2, (token2, token4)
 
 
 def test_environment_token_without_monkey_patching():
