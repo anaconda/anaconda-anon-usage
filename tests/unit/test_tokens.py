@@ -9,6 +9,32 @@ def test_client_token(aau_token_path):
     assert exists(aau_token_path)
 
 
+def test_client_token_add_hostid(aau_token_path):
+    assert not exists(aau_token_path)
+    token1 = utils._random_token()
+    with open(aau_token_path, "w") as fp:
+        fp.write(token1)
+    token2 = tokens.client_token()
+    assert token1 == token2
+    with open(aau_token_path) as fp:
+        token3 = fp.read()
+    assert token3.split(" ", 1)[0] == token2, (token2, token3)
+    assert token3.split(" ", 1)[1] == utils._get_node_str(), token3
+
+
+def test_client_token_replace_hostid(aau_token_path):
+    assert not exists(aau_token_path)
+    token1 = utils._random_token()
+    with open(aau_token_path, "w") as fp:
+        fp.write(token1 + " xxxxxxx")
+    token2 = tokens.client_token()
+    assert token1 != token2
+    with open(aau_token_path) as fp:
+        token3 = fp.read()
+    assert token3.split(" ", 1)[0] == token2, (token2, token3)
+    assert token3.split(" ", 1)[1] == utils._get_node_str(), token3
+
+
 def test_environment_token_without_monkey_patching():
     assert tokens.environment_token() is not None
 

@@ -3,6 +3,7 @@ import base64
 import errno
 import os
 import sys
+import uuid
 from os.path import dirname, isdir, isfile
 from threading import RLock
 from typing import List, Optional
@@ -160,6 +161,31 @@ def _deferred_exists(
             return token
 
 
+__nodestr = None
+
+
+def _get_node_str():
+    """
+    Uses uuid.getnode to obtain the hardware address from the system.
+    This value is not encoded into any anonymous token. But it *is*
+    used to help ensure that each randomly generated client token is
+    used by only one conda user.
+    https://docs.python.org/3/library/uuid.html#uuid.getnode
+    """
+    global __nodestr
+    if __nodestr is None:
+        val = uuid.getnode()
+        if (val & (1 << 40)) != 0:
+            # When the multicast bit is set, it means that an address
+            # cannot be determined, so this value is actually random.
+            _debug("Host ID not available")
+            __nodestr = ""
+        else:
+            __nodestr = format(val, "x")
+            _debug("Host ID retrieved: %s", __nodestr)
+    return __nodestr
+
+
 def _read_file(fpath, what, read_only=False, single_line=False):
     """
     Implements the saved token functionality. If the specified
@@ -195,7 +221,7 @@ def _read_file(fpath, what, read_only=False, single_line=False):
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
 
 
-def _saved_token(fpath, what, must_exist=None, read_only=False):
+def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
@@ -204,12 +230,46 @@ def _saved_token(fpath, what, must_exist=None, read_only=False):
     """
     global DEFERRED
     what = what + " token"
+    regenerate = resave = False
     client_token = _read_file(fpath, what, single_line=True) or ""
-    if not read_only and len(client_token) < TOKEN_LENGTH:
-        if len(client_token) > 0:
-            _debug("Generating longer %s", what)
-        client_token = _random_token(what)
-        status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
+    client_token, *xtra = client_token.split(" ", 1)
+    if len(client_token) < TOKEN_LENGTH:
+        if client_token:
+            _debug("Regenerating %s due to short length", what)
+        regenerate = True
+    if node_tie:
+        """
+        Client tokens should be unique to each user, but under some
+        scenarios they are inadvertently copied to multiple machines,
+        which can frustrate our analysis. To correct this issue, we
+        determine the host ID for this
+        however, the
+        Client ttokens can sometimesClient tokens can sometimes be cloned to multiple machines,
+        which can frustrate disaggregation. To correct this we look at
+        the uuid.getnode() value, which is basically the mac address,
+        and save it alongside the token value. If a change in the getnode
+        value occurs, we invalidate the client token as well."""
+        current_node = _get_node_str()
+        if regenerate or not current_node:
+            pass
+        elif not xtra:
+            _debug("Attaching host ID to %s", what)
+            resave = True
+        elif xtra[0] == current_node:
+            _debug("Host ID match confirmed for %s", what)
+        else:
+            _debug("Regenerating %s due to hostID change", what)
+            regenerate = True
+    if regenerate or resave:
+        if read_only:
+            return ""
+        if regenerate:
+            client_token = _random_token()
+        save_data = client_token
+        if node_tie and current_node:
+            save_data = client_token + " " + current_node
+            _debug("Attached host ID to %s: %s", what, save_data)
+        status = _write_attempt(must_exist, fpath, save_data, what[0] in WRITE_CHAOS)
         if status == WRITE_FAIL:
             _debug("Returning blank %s", what)
             return ""
@@ -217,5 +277,5 @@ def _saved_token(fpath, what, must_exist=None, read_only=False):
             # If the environment has not yet been created we need
             # to defer the token write until later.
             _debug("Deferring %s write", what)
-            DEFERRED.append((must_exist, fpath, client_token, what))
+            DEFERRED.append((must_exist, fpath, save_data, what))
     return client_token
