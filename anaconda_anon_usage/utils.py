@@ -173,16 +173,25 @@ def _get_node_str():
     https://docs.python.org/3/library/uuid.html#uuid.getnode
     """
     global __nodestr
-    if __nodestr is None:
-        val = uuid.getnode()
-        if (val & (1 << 40)) != 0:
-            # When the multicast bit is set, it means that an address
-            # cannot be determined, so this value is actually random.
-            _debug("Host ID not available")
-            __nodestr = ""
-        else:
-            __nodestr = format(val, "x")
-            _debug("Host ID retrieved: %s", __nodestr)
+    if __nodestr is not None:
+        return __nodestr
+    # The UUID standard says that if a host ID cannot be determined,
+    # a random one can be generated with its multicast bit set. But
+    # the converse does seems not to be true: there *are* instances
+    # where a stable host ID will have its multicast bit set. So we
+    # need a way to tell if uuid.getnode() is random, hence the
+    # monkeypatching we're doing here to force a definitive result.
+    __old_random_getnode = uuid._random_getnode
+    uuid._random_getnode = lambda: 0
+    val = uuid.getnode()
+    uuid._random_getnode = __old_random_getnode
+    if val == 0:
+        _debug("Host ID not available")
+        __nodestr = ""
+        uuid._node = __old_random_getnode()
+    else:
+        __nodestr = format(val, "x")
+        _debug("Host ID retrieved: %s", __nodestr)
     return __nodestr
 
 
