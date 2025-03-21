@@ -138,7 +138,7 @@ def client_token():
     that fails, an empty string is returned.
     """
     fpath = join(CONFIG_DIR, "aau_token")
-    return _saved_token(fpath, "client")
+    return _saved_token(fpath, "client", node_tie=True)
 
 
 @cached

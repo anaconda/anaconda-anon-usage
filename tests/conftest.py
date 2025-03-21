@@ -1,5 +1,5 @@
 import tempfile
-from os import mkdir, remove
+from os import mkdir
 from os.path import dirname, join
 
 import pytest
@@ -11,7 +11,11 @@ from anaconda_anon_usage import tokens, utils
 
 @pytest.fixture
 def aau_token_path():
-    return join(tokens.CONFIG_DIR, "aau_token")
+    old_dir = tokens.CONFIG_DIR
+    with tempfile.TemporaryDirectory() as tname:
+        tokens.CONFIG_DIR = tname
+        yield join(tname, "aau_token")
+    tokens.CONFIG_DIR = old_dir
 
 
 def _system_token_path(npaths=1):
@@ -61,17 +65,6 @@ def two_org_tokens():
         t1 = _build_tokens(tpaths[1], True)
         t2 = _build_tokens(tpaths[4], False)
         yield t1 + t2[:1]
-
-
-@pytest.fixture(autouse=True)
-def token_cleanup(request, aau_token_path):
-    def _remove():
-        try:
-            remove(aau_token_path)
-        except FileNotFoundError:
-            pass
-
-    request.addfinalizer(_remove)
 
 
 @pytest.fixture(autouse=True)
