@@ -68,8 +68,6 @@ def _cache_clear(*args):
         CACHE.clear()
     else:
         CACHE = {k: v for k, v in CACHE.items() if k[0] not in args}
-    if "client_token" not in CACHE:
-        uuid._node = __nodestr = None
 
 
 def _debug(s, *args, error=False):
@@ -164,40 +162,6 @@ def _deferred_exists(
             return token
 
 
-__nodestr = None
-
-
-def _get_node_str():
-    """
-    Uses uuid.getnode to obtain the hardware address from the system.
-    This value is not encoded into any anonymous token. But it *is*
-    used to help ensure that each randomly generated client token is
-    used by only one conda user.
-    https://docs.python.org/3/library/uuid.html#uuid.getnode
-    """
-    global __nodestr
-    if __nodestr is not None:
-        return __nodestr
-    # The UUID standard says that if a host ID cannot be determined,
-    # a random one can be generated with its multicast bit set. But
-    # the converse does seems not to be true: there *are* instances
-    # where a stable host ID will have its multicast bit set. So we
-    # need a way to tell if uuid.getnode() is random, hence the
-    # monkeypatching we're doing here to force a definitive result.
-    __old_random_getnode = uuid._random_getnode
-    uuid._random_getnode = lambda: 0
-    val = uuid.getnode()
-    uuid._random_getnode = __old_random_getnode
-    if val == 0:
-        _debug("Host ID not available")
-        __nodestr = ""
-        uuid._node = __old_random_getnode()
-    else:
-        __nodestr = format(val, "x")
-        _debug("Host ID retrieved: %s", __nodestr)
-    return __nodestr
-
-
 def _read_file(fpath, what, read_only=False, single_line=False):
     """
     Implements the saved token functionality. If the specified
@@ -233,6 +197,17 @@ def _read_file(fpath, what, read_only=False, single_line=False):
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
 
 
+def _get_node_str():
+    """
+    Returns a base64-encoded representation of the host ID
+    as determined by uuid.getnode().
+    """
+    val = uuid.getnode().to_bytes(6, byteorder=sys.byteorder)
+    val = base64.urlsafe_b64encode(val)
+    val = val.decode("ascii")
+    return val
+
+
 def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
     """
     Implements the saved token functionality. If the specified
@@ -250,19 +225,14 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
             _debug("Regenerating %s due to short length", what)
         regenerate = True
     if node_tie:
-        """
-        Client tokens should be unique to each user, but under some
-        scenarios they are inadvertently copied to multiple machines,
-        which can frustrate our analysis. To correct this issue, we
-        determine the host ID for this
-        however, the
-        Client ttokens can sometimesClient tokens can sometimes be cloned to multiple machines,
-        which can frustrate disaggregation. To correct this we look at
-        the uuid.getnode() value, which is basically the mac address,
-        and save it alongside the token value. If a change in the getnode
-        value occurs, we invalidate the client token as well."""
+        # Client tokens should be unique to each user, but under some
+        # scenarios they are inadvertently copied to multiple machines,
+        # which breaks that behavior. To resolve this issue, we append
+        # the host ID on which the token was generated to the token file.
+        # If the host ID changes, we can regenerate the token. The token
+        # itself remains 100% anonymous under this approach.
         current_node = _get_node_str()
-        if regenerate or not current_node:
+        if regenerate:
             pass
         elif not xtra:
             _debug("Attaching host ID to %s", what)
