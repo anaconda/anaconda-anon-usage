@@ -202,9 +202,11 @@ def _get_node_str():
     Returns a base64-encoded representation of the host ID
     as determined by uuid.getnode().
     """
-    val = uuid.getnode().to_bytes(6, byteorder=sys.byteorder)
-    val = base64.urlsafe_b64encode(val)
-    val = val.decode("ascii")
+    val = uuid._unix_getnode() or uuid._windll_getnode()
+    if val:
+        val = val.to_bytes(6, byteorder=sys.byteorder)
+        val = base64.urlsafe_b64encode(val)
+        val = val.decode("ascii")
     return val
 
 
