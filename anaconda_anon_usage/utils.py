@@ -3,6 +3,7 @@ import base64
 import errno
 import os
 import sys
+import uuid
 from os.path import dirname, isdir, isfile
 from threading import RLock
 from typing import List, Optional
@@ -62,6 +63,7 @@ def cached(func):
 
 def _cache_clear(*args):
     global CACHE
+    global __nodestr
     if not args:
         CACHE.clear()
     else:
@@ -195,7 +197,20 @@ def _read_file(fpath, what, read_only=False, single_line=False):
             _debug("Unexpected error reading: %s\n  %s", fpath, exc, error=True)
 
 
-def _saved_token(fpath, what, must_exist=None, read_only=False):
+def _get_node_str():
+    """
+    Returns a base64-encoded representation of the host ID
+    as determined by uuid.getnode().
+    """
+    val = uuid._unix_getnode() or uuid._windll_getnode()
+    if val:
+        val = val.to_bytes(6, byteorder=sys.byteorder)
+        val = base64.urlsafe_b64encode(val)
+        val = val.decode("ascii")
+    return val
+
+
+def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
     """
     Implements the saved token functionality. If the specified
     file exists, and contains a token with the right format,
@@ -204,12 +219,41 @@ def _saved_token(fpath, what, must_exist=None, read_only=False):
     """
     global DEFERRED
     what = what + " token"
+    regenerate = resave = False
     client_token = _read_file(fpath, what, single_line=True) or ""
-    if not read_only and len(client_token) < TOKEN_LENGTH:
-        if len(client_token) > 0:
-            _debug("Generating longer %s", what)
-        client_token = _random_token(what)
-        status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
+    client_token, *xtra = client_token.split(" ", 1)
+    if len(client_token) < TOKEN_LENGTH:
+        if client_token:
+            _debug("Regenerating %s due to short length", what)
+        regenerate = True
+    if node_tie:
+        # Client tokens should be unique to each user, but under some
+        # scenarios they are inadvertently copied to multiple machines,
+        # which breaks that behavior. To resolve this issue, we append
+        # the host ID on which the token was generated to the token file.
+        # If the host ID changes, we can regenerate the token. The token
+        # itself remains 100% anonymous under this approach.
+        current_node = _get_node_str()
+        if regenerate:
+            pass
+        elif not xtra:
+            _debug("Attaching host ID to %s", what)
+            resave = True
+        elif xtra[0] == current_node:
+            _debug("Host ID match confirmed for %s", what)
+        else:
+            _debug("Regenerating %s due to hostID change", what)
+            regenerate = True
+    if regenerate or resave:
+        if read_only:
+            return ""
+        if regenerate:
+            client_token = _random_token()
+        save_data = client_token
+        if node_tie and current_node:
+            save_data = client_token + " " + current_node
+            _debug("Attached host ID to %s: %s", what, save_data)
+        status = _write_attempt(must_exist, fpath, save_data, what[0] in WRITE_CHAOS)
         if status == WRITE_FAIL:
             _debug("Returning blank %s", what)
             return ""
@@ -217,5 +261,5 @@ def _saved_token(fpath, what, must_exist=None, read_only=False):
             # If the environment has not yet been created we need
             # to defer the token write until later.
             _debug("Deferring %s write", what)
-            DEFERRED.append((must_exist, fpath, client_token, what))
+            DEFERRED.append((must_exist, fpath, save_data, what))
     return client_token

@@ -87,8 +87,10 @@ jobs:
         mv conda-bld $CONDA/
         version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
         pkg="anaconda-anon-usage=$version"
+        # This is to address an issue with Linux ARM Python 3.9 only
+        if [[ "${{ matrix.os }}" = ubuntu-*-arm ]]; then ppkg="python<3.9|>=3.10"; else ppkg=""; fi
         conda install -c local anaconda-client constructor $pkg
-        conda create -p ./testenv -c local $pkg conda==${{ matrix.cversion }} --file tests/requirements.txt
+        conda create -p ./testenv -c local $ppkg $pkg conda==${{ matrix.cversion }} --file tests/requirements.txt
         mkdir -p ./testenv/envs
         conda create -p ./testenv/envs/testchild1 python --yes
         conda create -p ./testenv/envs/testchild2 python --yes
