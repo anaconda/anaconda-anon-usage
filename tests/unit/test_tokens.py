@@ -1,7 +1,4 @@
-import sys
 from os.path import exists
-
-import pytest
 
 from anaconda_anon_usage import tokens, utils
 
@@ -12,7 +9,6 @@ def test_client_token(aau_token_path):
     assert exists(aau_token_path)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason="requires python3.10 or higher")
 def test_client_token_add_hostid(aau_token_path):
     assert not exists(aau_token_path)
     token1 = utils._random_token()
@@ -29,7 +25,6 @@ def test_client_token_add_hostid(aau_token_path):
     assert token4 == token2, (token2, token4)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason="requires python3.10 or higher")
 def test_client_token_replace_hostid(aau_token_path):
     assert not exists(aau_token_path)
     token1 = utils._random_token()
