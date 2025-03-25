@@ -9,6 +9,19 @@ def test_client_token(aau_token_path):
     assert exists(aau_token_path)
 
 
+def test_client_token_no_nodeid(aau_token_path, mocker):
+    m1 = mocker.patch("uuid._unix_getnode")
+    m1.return_value = None
+    m2 = mocker.patch("uuid._windll_getnode")
+    m2.return_value = None
+    token1 = tokens.client_token()
+    assert token1 != "" and exists(aau_token_path)
+    with open(aau_token_path) as fp:
+        token2 = fp.read()
+    # No hostid saved in the token file
+    assert token1 == token2, (token1, token2)
+
+
 def test_client_token_add_hostid(aau_token_path):
     assert not exists(aau_token_path)
     token1 = utils._random_token()
