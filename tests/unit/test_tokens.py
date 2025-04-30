@@ -23,7 +23,8 @@ def test_client_token_no_nodeid(aau_token_path, mocker):
 
 
 def test_client_token_add_hostid(aau_token_path):
-    assert not exists(aau_token_path)
+    node_path = aau_token_path + "_host"
+    assert not exists(aau_token_path) and not exists(node_path)
     token1 = utils._random_token()
     with open(aau_token_path, "w") as fp:
         fp.write(token1)
@@ -31,24 +32,50 @@ def test_client_token_add_hostid(aau_token_path):
     assert token1 == token2
     with open(aau_token_path) as fp:
         token3 = fp.read()
-    assert token3.split(" ", 1)[0] == token2, (token2, token3)
-    assert token3.split(" ", 1)[1] == utils._get_node_str(), token3
+    with open(node_path) as fp:
+        saved_node = fp.read()
+    assert token3 == token2, (token2, token3)
+    assert saved_node == utils._get_node_str(), saved_node
     utils._cache_clear()
     token4 = tokens.client_token()
     assert token4 == token2, (token2, token4)
 
 
 def test_client_token_replace_hostid(aau_token_path):
-    assert not exists(aau_token_path)
+    node_path = aau_token_path + "_host"
+    assert not exists(aau_token_path) and not exists(node_path)
     token1 = utils._random_token()
     with open(aau_token_path, "w") as fp:
-        fp.write(token1 + " xxxxxxx")
+        fp.write(token1)
+    with open(node_path, "w") as fp:
+        fp.write("xxxxxxxx")
     token2 = tokens.client_token()
     assert token1 != token2
     with open(aau_token_path) as fp:
         token3 = fp.read()
-    assert token3.split(" ", 1)[0] == token2, (token2, token3)
-    assert token3.split(" ", 1)[1] == utils._get_node_str(), token3
+    with open(node_path) as fp:
+        saved_node = fp.read()
+    assert token3 == token2, (token2, token3)
+    assert saved_node == utils._get_node_str(), saved_node
+    utils._cache_clear()
+    token4 = tokens.client_token()
+    assert token4 == token2, (token2, token4)
+
+
+def test_client_token_migrate_hostid(aau_token_path):
+    node_path = aau_token_path + "_host"
+    assert not exists(aau_token_path) and not exists(node_path)
+    token1 = utils._random_token()
+    with open(aau_token_path, "w") as fp:
+        fp.write(token1 + " " + utils._get_node_str())
+    token2 = tokens.client_token()
+    assert token1 == token2
+    with open(aau_token_path) as fp:
+        token3 = fp.read()
+    with open(node_path) as fp:
+        saved_node = fp.read()
+    assert token3 == token2, (token2, token3)
+    assert saved_node == utils._get_node_str(), saved_node
     utils._cache_clear()
     token4 = tokens.client_token()
     assert token4 == token2, (token2, token4)

@@ -221,6 +221,7 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
     what = what + " token"
     regenerate = resave = False
     client_token = _read_file(fpath, what, single_line=True) or ""
+    # Version 0.7.0 stored the host ID alongside the client token
     client_token, *xtra = client_token.split(" ", 1)
     if len(client_token) < TOKEN_LENGTH:
         if client_token:
@@ -229,31 +230,39 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
     if node_tie:
         # Client tokens should be unique to each user, but under some
         # scenarios they are inadvertently copied to multiple machines,
-        # which breaks that behavior. To resolve this issue, we append
-        # the host ID on which the token was generated to the token file.
-        # If the host ID changes, we can regenerate the token. The token
-        # itself remains 100% anonymous under this approach.
+        # which breaks that behavior. To resolve this issue, we create a
+        # sidecar file containing the host ID. If the host ID changes,
+        # we can regenerate the token. The token itself remains 100%
+        # anonymous under this approach, and the host ID is not sent.
         current_node = _get_node_str()
-        if regenerate:
+        npath = fpath + "_host"
+        saved_node = _read_file(npath, "Host id", single_line=True) or ""
+        true_node = saved_node or (xtra[0] if xtra else None)
+        if regenerate or not true_node:
             pass
-        elif not xtra:
-            _debug("Attaching host ID to %s", what)
-            resave = True
-        elif xtra[0] == current_node:
-            _debug("Host ID match confirmed for %s", what)
-        else:
+        elif true_node != current_node:
             _debug("Regenerating %s due to hostID change", what)
             regenerate = True
+        elif xtra:
+            _debug("Stripping host ID from %s file", what)
+            resave = True
+        else:
+            _debug("Host ID match confirmed for %s", what)
+        if saved_node != current_node:
+            action = (
+                ("Migrating" if true_node == current_node else "Updating")
+                if true_node
+                else "Saving"
+            )
+            _debug("%s host ID: %s", action, current_node)
+            if _write_attempt(False, npath, current_node, False) == WRITE_DEFER:
+                DEFERRED.append((False, npath, current_node, "Host ID"))
     if regenerate or resave:
         if read_only:
             return ""
         if regenerate:
             client_token = _random_token()
-        save_data = client_token
-        if node_tie and current_node:
-            save_data = client_token + " " + current_node
-            _debug("Attached host ID to %s: %s", what, save_data)
-        status = _write_attempt(must_exist, fpath, save_data, what[0] in WRITE_CHAOS)
+        status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
         if status == WRITE_FAIL:
             _debug("Returning blank %s", what)
             return ""
@@ -261,5 +270,5 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
             # If the environment has not yet been created we need
             # to defer the token write until later.
             _debug("Deferring %s write", what)
-            DEFERRED.append((must_exist, fpath, save_data, what))
+            DEFERRED.append((must_exist, fpath, client_token, what))
     return client_token
