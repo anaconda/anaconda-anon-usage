@@ -28,6 +28,7 @@ Tokens = namedtuple(
     ),
 )
 CONFIG_DIR = expanduser("~/.conda")
+ANACONDA_DIR = expanduser("~/.anaconda")
 ORG_TOKEN_NAME = "org_token"
 MACHINE_TOKEN_NAME = "machine_token"
 
@@ -165,10 +166,16 @@ def environment_token(prefix=None):
 
 @cached
 def anaconda_cloud_token():
+    """Retrieve Anaconda Cloud token from keyring.
+
+    Examines all entries under 'Anaconda Cloud' in the keyring and
+    selects the token with the latest expiration date. This handles
+    migration from 'anaconda.cloud' to 'anaconda.com' entries.
+
+    Returns:
+        str: Base64-encoded token, or None if no valid token found.
     """
-    Returns the token for the logged-in anaconda user, if present.
-    """
-    fpath = expanduser(join("~", ".anaconda", "keyring"))
+    fpath = expanduser(join(ANACONDA_DIR, "keyring"))
     data = _read_file(fpath, "anaconda keyring")
     if not data:
         return

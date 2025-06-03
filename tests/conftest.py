@@ -1,4 +1,7 @@
+import base64
+import json
 import tempfile
+import uuid
 from os import mkdir
 from os.path import dirname, join
 
@@ -9,13 +12,41 @@ from conda.base.context import Context, context
 from anaconda_anon_usage import tokens, utils
 
 
+def _jsond(rec, urlsafe=False):
+    return base64.b64encode(json.dumps(rec).encode("ascii")).decode("ascii")
+
+
+def _test_keyring():
+    domains = ["random.domain", "anaconda.cloud", "anaconda.com"]
+    drecs, exp = {}, 0
+    for dom in domains:
+        exp = exp + 123456
+        sub = str(uuid.uuid4())
+        rec = {"exp": exp, "sub": sub}
+        api_key = "xxx." + _jsond(rec) + ".xxx"
+        rec = {"domain": dom, "api_key": api_key, "repo_tokens": [], "version": 2}
+        drecs[dom] = _jsond(rec)
+    result = {"Anaconda Cloud": drecs}
+    return json.dumps(result), sub
+
+
 @pytest.fixture
 def aau_token_path():
-    old_dir = tokens.CONFIG_DIR
+    old_dir, old_adir = tokens.CONFIG_DIR, tokens.ANACONDA_DIR
     with tempfile.TemporaryDirectory() as tname:
-        tokens.CONFIG_DIR = tname
+        tokens.CONFIG_DIR = tokens.ANACONDA_DIR = tname
         yield join(tname, "aau_token")
     tokens.CONFIG_DIR = old_dir
+    tokens.ANACONDA_DIR = old_adir
+
+
+@pytest.fixture()
+def anaconda_uid(aau_token_path):
+    kpath = join(dirname(aau_token_path), "keyring")
+    kstr, sub = _test_keyring()
+    with open(kpath, "w") as fp:
+        fp.write(kstr)
+    yield sub
 
 
 def _system_token_path(npaths=1):
@@ -48,19 +79,19 @@ def _build_tokens(tpath, machine=True):
 
 
 @pytest.fixture
-def no_system_tokens():
+def no_system_tokens(aau_token_path):
     for tpath in _system_token_path(0):
         yield (None, None)
 
 
 @pytest.fixture
-def system_tokens():
+def system_tokens(aau_token_path):
     for tpaths in _system_token_path(1):
         yield _build_tokens(tpaths[1])
 
 
 @pytest.fixture
-def two_org_tokens():
+def two_org_tokens(aau_token_path):
     for tpaths in _system_token_path(2):
         t1 = _build_tokens(tpaths[1], True)
         t2 = _build_tokens(tpaths[4], False)
