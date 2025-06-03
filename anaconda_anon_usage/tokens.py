@@ -7,7 +7,6 @@
 import base64
 import json
 import sys
-import time
 import uuid
 from collections import namedtuple
 from os import environ
@@ -29,6 +28,7 @@ Tokens = namedtuple(
     ),
 )
 CONFIG_DIR = expanduser("~/.conda")
+ANACONDA_DIR = expanduser("~/.anaconda")
 ORG_TOKEN_NAME = "org_token"
 MACHINE_TOKEN_NAME = "machine_token"
 
@@ -166,26 +166,47 @@ def environment_token(prefix=None):
 
 @cached
 def anaconda_cloud_token():
+    """Retrieve Anaconda Cloud token from keyring.
+
+    Examines all entries under 'Anaconda Cloud' in the keyring and
+    selects the token with the latest expiration date. This handles
+    migration from 'anaconda.cloud' to 'anaconda.com' entries.
+
+    Returns:
+        str: Base64-encoded token, or None if no valid token found.
     """
-    Returns the token for the logged-in anaconda user, if present.
-    """
-    fpath = expanduser(join("~", ".anaconda", "keyring"))
+    fpath = expanduser(join(ANACONDA_DIR, "keyring"))
     data = _read_file(fpath, "anaconda keyring")
     if not data:
         return
     try:
-        data = json.loads(data)["Anaconda Cloud"]["anaconda.cloud"]
-        data = json.loads(base64.b64decode(data))["api_key"]
-        data = json.loads(base64.b64decode(data.split(".", 2)[1] + "==="))
-        data["exp"] = int(data["exp"])
-        data["sub"] = uuid.UUID(data["sub"]).bytes
+        data = json.loads(data)
     except Exception as exc:
-        _debug("Unexpected error parsing keyring file: %s", exc)
+        _debug("Unexpected JSON decoding error parsing keyring file: %s", exc)
         return
-    if time.time() > data["exp"]:
-        _debug("Anaconda Cloud token has expired")
+    if not data or not isinstance(data, dict):
+        _debug("Empty keyring")
         return
-    token = base64.urlsafe_b64encode(data["sub"]).decode("ascii").strip("=")
+    exp, sub = 0, None
+    for key, rec in (data.get("Anaconda Cloud") or {}).items():
+        try:
+            tdata = json.loads(base64.b64decode(rec))["api_key"]
+            tdata = json.loads(base64.b64decode(tdata.split(".", 2)[1] + "==="))
+            t_exp = int(tdata["exp"])
+            if t_exp > exp:
+                sub = tdata["sub"]
+                exp = t_exp
+        except Exception as exc:
+            _debug("Unexpected error parsing keyring entry '%s': %s", key, exc)
+    if not sub:
+        _debug("No Anaconda Cloud keyring records found")
+        return
+    try:
+        sub = uuid.UUID(sub).bytes
+        token = base64.urlsafe_b64encode(sub).decode("ascii").strip("=")
+    except Exception as exc:
+        _debug("Unexpected error retrieving username: %s", exc)
+        return
     _debug("Retrieved Anaconda Cloud token: %s", token)
     return token
 

@@ -1,3 +1,6 @@
+import base64
+import re
+import uuid
 from os.path import exists
 
 from anaconda_anon_usage import tokens, utils
@@ -97,6 +100,7 @@ def test_token_string(no_system_tokens):
     assert "c/" in token_string
     assert "s/" in token_string
     assert "e/" in token_string
+    assert "a/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
@@ -107,6 +111,7 @@ def test_token_string_disabled(no_system_tokens):
     assert "c/" not in token_string
     assert "s/" not in token_string
     assert "e/" not in token_string
+    assert "a/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
@@ -175,3 +180,12 @@ def test_token_string_env_readonly(monkeypatch, no_system_tokens):
     assert "e/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
+
+
+def test_anaconda_string(anaconda_uid):
+    token_string = tokens.token_string()
+    assert "a/" in token_string
+    expected = uuid.UUID(anaconda_uid).bytes
+    expected = base64.urlsafe_b64encode(expected).decode("ascii").rstrip("=")
+    aval = re.sub("^.*a/", "", token_string).split(" ", 1)[0]
+    assert aval == expected
