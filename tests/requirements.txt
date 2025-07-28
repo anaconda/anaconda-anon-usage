@@ -1,4 +1,4 @@
 pytest
 pytest-cov
 pytest-mock
-mcg::proxyspy>=0.1.3
+mcg::proxyspy>=0.1.4
