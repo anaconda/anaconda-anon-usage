@@ -187,6 +187,8 @@ a random token ready for use as an organization or machine token:
 ```
 python -m anaconda_anon_usage.tokens --random
 ```
+Tokens can also be constructed manually, but must include only characters
+in the ranges `a-z`, `A-Z`, `0-9`, `-`, and `_`, and no spaces.
 
 ### Activation heartbeats
 

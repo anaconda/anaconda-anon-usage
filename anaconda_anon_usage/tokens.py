@@ -116,12 +116,13 @@ def _system_tokens(fname, what):
     tokens = list(dict.fromkeys(t for t in tokens if t))
     if not tokens:
         _debug("No %s tokens found", what)
-    invalid = [t for t in tokens if not re.match(VALID_TOKEN_RE, t)]
-    if invalid:
-        tokens = [t for t in tokens if t not in invalid]
-        invalid = ", ".join(invalid)
+    # Make sure the tokens we omit have only valid characters, so any
+    # server-side token parsing is not frustrated.
+    valid = [t for t in tokens if re.match(VALID_TOKEN_RE, t)]
+    if len(valid) < len(tokens):
+        invalid = ", ".join(t for t in tokens if t not in valid)
         _debug("One or more invalid %s tokens discarded: %s", what, invalid)
-    return tokens
+    return valid
 
 
 @cached
