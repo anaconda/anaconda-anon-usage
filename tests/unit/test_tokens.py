@@ -163,6 +163,18 @@ def test_token_string_with_system_and_env(system_tokens):
     assert token_string.count(" m/") == 2
 
 
+def test_token_string_with_invalid_tokens(no_system_tokens):
+    org_token_e = "invalid token"
+    mch_token_e = "superlongtokenthathasnobusinessbeinganactualtoken"
+    environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
+    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
+    token_string = tokens.token_string()
+    del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
+    del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
+    assert "o/" not in token_string
+    assert "m/" not in token_string
+
+
 def test_token_string_no_client_token(monkeypatch, no_system_tokens):
     def _mock_saved_token(*args, **kwargs):
         return ""

@@ -32,7 +32,10 @@ CONFIG_DIR = expanduser("~/.conda")
 ANACONDA_DIR = expanduser("~/.anaconda")
 ORG_TOKEN_NAME = "org_token"
 MACHINE_TOKEN_NAME = "machine_token"
-VALID_TOKEN_RE = r"^(?:\w|-)+$"
+
+# System tokens may consist of only letters, numbers,
+# underscores, and dashes, with no more than 36 characters.
+VALID_TOKEN_RE = r"^(?:[A-Za-z0-9]|_|-){1,36}$"
 
 
 @cached
@@ -103,15 +106,15 @@ def _system_tokens(fname, what):
     """
     tokens = []
     env_name = "ANACONDA_ANON_USAGE_" + fname.upper()
-    t_tokens = environ.get(env_name)
-    if t_tokens:
-        _debug("Found %s token in environment: %s", what, t_tokens)
-        tokens.extend(t_tokens.split("/"))
+    t_token = environ.get(env_name)
+    if t_token:
+        _debug("Found %s token in environment: %s", what, t_token)
+        tokens.append(t_token)
     for path in _search_path():
         fpath = join(path, fname)
         if isfile(fpath):
-            t_tokens = _read_file(fpath, what + " token", single_line=True)
-            tokens.extend(t_tokens.split("/"))
+            t_token = _read_file(fpath, what + " token", single_line=True)
+            tokens.append(t_token)
     # Deduplicate while preserving order
     tokens = list(dict.fromkeys(t for t in tokens if t))
     if not tokens:
