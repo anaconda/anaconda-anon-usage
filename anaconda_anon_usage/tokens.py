@@ -10,7 +10,6 @@ import re
 import sys
 import uuid
 from collections import namedtuple
-from itertools import chain
 from os import environ
 from os.path import expanduser, isdir, isfile, join
 
@@ -103,21 +102,18 @@ def _system_tokens(fname, what):
     along the path, in which case we combine them
     """
     tokens = []
-    for path in chain((None,), _search_path()):
-        if path is None:
-            env_name = "ANACONDA_ANON_USAGE_" + fname.upper()
-            t_tokens = environ.get(env_name)
-            if not t_tokens:
-                continue
-            _debug("Found %s token in environment: %s", what, t_tokens)
-        else:
-            fpath = join(path, fname)
-            if not isfile(fpath):
-                continue
+    env_name = "ANACONDA_ANON_USAGE_" + fname.upper()
+    t_tokens = environ.get(env_name)
+    if t_tokens:
+        _debug("Found %s token in environment: %s", what, t_tokens)
+        tokens.extend(t_tokens.split("/"))
+    for path in _search_path():
+        fpath = join(path, fname)
+        if isfile(fpath):
             t_tokens = _read_file(fpath, what + " token", single_line=True)
-        for token in t_tokens.split("/"):
-            if token and token not in tokens:
-                tokens.append(token)
+            tokens.extend(t_tokens.split("/"))
+    # Deduplicate while preserving order
+    tokens = list(dict.fromkeys(t for t in tokens if t))
     if not tokens:
         _debug("No %s tokens found", what)
     invalid = [t for t in tokens if not re.match(VALID_TOKEN_RE, t)]

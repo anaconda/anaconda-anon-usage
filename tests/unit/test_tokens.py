@@ -136,22 +136,31 @@ def test_token_string_with_two_org_tokens(two_org_tokens):
 
 def test_token_string_with_env_org_token(no_system_tokens):
     org_token_e = utils._random_token()
+    mch_token_e = utils._random_token()
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
+    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
     token_string = tokens.token_string()
     del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
+    del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
     assert "o/" + org_token_e in token_string
+    assert "m/" + mch_token_e in token_string
 
 
 def test_token_string_with_system_and_env(system_tokens):
     org_token, mch_token = system_tokens
     org_token_e = utils._random_token()
+    mch_token_e = utils._random_token()
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
+    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
     token_string = tokens.token_string()
     del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
+    del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
     assert "o/" + org_token in token_string
     assert "o/" + org_token_e in token_string
     assert "m/" + mch_token in token_string
+    assert "m/" + mch_token_e in token_string
     assert token_string.count(" o/") == 2
+    assert token_string.count(" m/") == 2
 
 
 def test_token_string_no_client_token(monkeypatch, no_system_tokens):
