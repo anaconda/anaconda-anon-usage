@@ -165,12 +165,18 @@ def environment_token(prefix=None):
 
 
 def _jwt_to_token(s):
-    """Convert an encoded JWT entry into a token and an expiration.
+    """Unpacks an Anaconda auth token and returns the encoded user ID for
+    potential inclusion in the user agent, along with its expiration.
 
-    Performs a set of integrity checks on the supplied JWT, except for the
-    signature, as well as its expected contents. If the checks pass, then
-    the function returns an token generated from the "sub" entry, and the
-    expiration time. Otherwise, returns None and 0, respectively.
+    The Anaconda API key takes the form of a standard OAuth2 access token,
+    with the additional requirement that the "sub" field is a UUID string.
+    This code perorms a basic set of integrity checks to confirm that this
+    is the case. If the checks pass, the function returns an encoded form
+    of "sub" as well as the "exp" value to enable sorting by expiration.
+    If the checks fail, the function returns (None, 0).
+
+    The signature is not fully validated as part of the check; only that it
+    is a base64-encoded value. Validation is left to anaconda-auth.
 
     Returns:
       token: the token if valid; None otherwise
@@ -179,24 +185,23 @@ def _jwt_to_token(s):
     if not s:
         return None, 0
     try:
-        # JWT should have three parts separated by periods
+        # The JWT should have three parts separated by periods
         parts = s.split(".")
         assert len(parts) == 3 and all(parts), "3 parts expected"
         # Each part should be base64 encoded
         parts = list(map(lambda x: base64.urlsafe_b64decode(x + "==="), parts))
         # The header and payload should be json dictionaries
         parts = list(map(json.loads, parts[:2]))
-        assert (
-            isinstance(parts[0], dict) and parts[0].get("typ") == "JWT"
-        ), "Invalid header"
+        assert isinstance(parts[0], dict), "Invalid header"
+        assert parts[0].get("typ") == "JWT", "Invalid header"
         assert isinstance(parts[1], dict), "Invalid payload"
-        # The payload should have a positive integer exp and non-empty sub
+        # The payload should have a positive integer expiration
         exp = parts[1].get("exp")
-        sub = parts[1].get("sub")
         assert isinstance(exp, int) and exp > 0, "Invalid expiration"
+        # The subscriber should be a non-empty UUID string
+        sub = parts[1].get("sub")
         assert sub, "Invalid subscriber"
-        # The sub should be a proper UUID string
-        # This is an Anaconda   not a JWT requirement
+        # This is an Anaconda requirement, not a JWT requirement
         sub = uuid.UUID(sub).bytes
         token = base64.urlsafe_b64encode(sub).decode("ascii").strip("=")
         return token, exp
@@ -206,7 +211,7 @@ def _jwt_to_token(s):
 
 
 @cached
-def anaconda_cloud_token():
+def anaconda_auth_token():
     """Retrieve Anaconda Cloud token from keyring.
 
     Examines all entries under 'Anaconda Cloud' in the keyring and
@@ -264,7 +269,7 @@ def all_tokens(prefix=None):
         client_token(),
         session_token(),
         environment_token(prefix),
-        anaconda_cloud_token(),
+        anaconda_auth_token(),
         organization_tokens(),
         machine_tokens(),
     )

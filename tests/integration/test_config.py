@@ -52,7 +52,7 @@ if m_tokens.organization_tokens():
     all_tokens.add("o")
 if m_tokens.machine_tokens():
     all_tokens.add("m")
-if m_tokens.anaconda_cloud_token():
+if m_tokens.anaconda_auth_token():
     all_tokens.add("a")
 
 proc = subprocess.run(
