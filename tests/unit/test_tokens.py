@@ -182,10 +182,19 @@ def test_token_string_env_readonly(monkeypatch, no_system_tokens):
     assert "m/" not in token_string
 
 
-def test_anaconda_string(anaconda_uid):
+def test_anaconda_string_keyring(anaconda_uid):
     token_string = tokens.token_string()
     assert "a/" in token_string
     expected = uuid.UUID(anaconda_uid).bytes
+    expected = base64.urlsafe_b64encode(expected).decode("ascii").rstrip("=")
+    aval = re.sub("^.*a/", "", token_string).split(" ", 1)[0]
+    assert aval == expected
+
+
+def test_anaconda_string_env(anaconda_uid_env):
+    token_string = tokens.token_string()
+    assert "a/" in token_string
+    expected = uuid.UUID(anaconda_uid_env).bytes
     expected = base64.urlsafe_b64encode(expected).decode("ascii").rstrip("=")
     aval = re.sub("^.*a/", "", token_string).split(" ", 1)[0]
     assert aval == expected

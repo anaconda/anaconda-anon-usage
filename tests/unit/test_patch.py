@@ -39,7 +39,7 @@ def test_user_agent_system_tokens(system_tokens):
 
 def test_user_agent_local_tokens():
     expected = []
-    token_names = ("anaconda_cloud", "organization", "machine")
+    token_names = ("anaconda_auth", "organization", "machine")
     for is_plural, tname in enumerate(token_names):
         fn = tname + "_token" + ("s" if is_plural else "")
         if getattr(tokens, fn)():

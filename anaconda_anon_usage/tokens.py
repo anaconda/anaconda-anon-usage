@@ -164,8 +164,54 @@ def environment_token(prefix=None):
     return _saved_token(fpath, "environment", prefix)
 
 
+def _jwt_to_token(s):
+    """Unpacks an Anaconda auth token and returns the encoded user ID for
+    potential inclusion in the user agent, along with its expiration.
+
+    The Anaconda API key takes the form of a standard OAuth2 access token,
+    with the additional requirement that the "sub" field is a UUID string.
+    This code perorms a basic set of integrity checks to confirm that this
+    is the case. If the checks pass, the function returns an encoded form
+    of "sub" as well as the "exp" value to enable sorting by expiration.
+    If the checks fail, the function returns (None, 0).
+
+    The signature is not fully validated as part of the check; only that it
+    is a base64-encoded value. Validation is left to anaconda-auth.
+
+    Returns:
+      token: the token if valid; None otherwise
+      exp: the expiration time
+    """
+    if not s:
+        return None, 0
+    try:
+        # The JWT should have three parts separated by periods
+        parts = s.split(".")
+        assert len(parts) == 3 and all(parts), "3 parts expected"
+        # Each part should be base64 encoded
+        parts = list(map(lambda x: base64.urlsafe_b64decode(x + "==="), parts))
+        # The header and payload should be json dictionaries
+        parts = list(map(json.loads, parts[:2]))
+        assert isinstance(parts[0], dict), "Invalid header"
+        assert parts[0].get("typ") == "JWT", "Invalid header"
+        assert isinstance(parts[1], dict), "Invalid payload"
+        # The payload should have a positive integer expiration
+        exp = parts[1].get("exp")
+        assert isinstance(exp, int) and exp > 0, "Invalid expiration"
+        # The subscriber should be a non-empty UUID string
+        sub = parts[1].get("sub")
+        assert sub, "Invalid subscriber"
+        # This is an Anaconda requirement, not a JWT requirement
+        sub = uuid.UUID(sub).bytes
+        token = base64.urlsafe_b64encode(sub).decode("ascii").strip("=")
+        return token, exp
+    except Exception as exc:
+        _debug("Unexpected %s parsing API key: %s", type(exc), exc)
+        return None, 0
+
+
 @cached
-def anaconda_cloud_token():
+def anaconda_auth_token():
     """Retrieve Anaconda Cloud token from keyring.
 
     Examines all entries under 'Anaconda Cloud' in the keyring and
@@ -175,6 +221,14 @@ def anaconda_cloud_token():
     Returns:
         str: Base64-encoded token, or None if no valid token found.
     """
+    env = environ.get("ANACONDA_AUTH_API_KEY")
+    if env:
+        _debug("ANACONDA_AUTH_API_KEY environment variable found")
+        token, _ = _jwt_to_token(env)
+        if token:
+            _debug("Retrieved Anaconda token from environment: %s", token)
+            return token
+        _debug("Could not retrieve API key from environment")
     fpath = expanduser(join(ANACONDA_DIR, "keyring"))
     data = _read_file(fpath, "anaconda keyring")
     if not data:
@@ -187,27 +241,20 @@ def anaconda_cloud_token():
     if not data or not isinstance(data, dict):
         _debug("Empty keyring")
         return
-    exp, sub = 0, None
+    token, exp = None, 0
     for key, rec in (data.get("Anaconda Cloud") or {}).items():
         try:
             tdata = json.loads(base64.b64decode(rec))["api_key"]
-            tdata = json.loads(base64.b64decode(tdata.split(".", 2)[1] + "==="))
-            t_exp = int(tdata["exp"])
-            if t_exp > exp:
-                sub = tdata["sub"]
-                exp = t_exp
         except Exception as exc:
             _debug("Unexpected error parsing keyring entry '%s': %s", key, exc)
-    if not sub:
-        _debug("No Anaconda Cloud keyring records found")
-        return
-    try:
-        sub = uuid.UUID(sub).bytes
-        token = base64.urlsafe_b64encode(sub).decode("ascii").strip("=")
-    except Exception as exc:
-        _debug("Unexpected error retrieving username: %s", exc)
-        return
-    _debug("Retrieved Anaconda Cloud token: %s", token)
+        t_token, t_exp = _jwt_to_token(tdata)
+        if t_exp > exp:
+            token = t_token
+            exp = t_exp
+    if token:
+        _debug("Retrieved Anaconda token from keyring: %s", token)
+    else:
+        _debug("No Anaconda keyring records found")
     return token
 
 
@@ -222,7 +269,7 @@ def all_tokens(prefix=None):
         client_token(),
         session_token(),
         environment_token(prefix),
-        anaconda_cloud_token(),
+        anaconda_auth_token(),
         organization_tokens(),
         machine_tokens(),
     )

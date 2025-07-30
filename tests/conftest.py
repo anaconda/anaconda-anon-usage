@@ -2,7 +2,7 @@ import base64
 import json
 import tempfile
 import uuid
-from os import mkdir
+from os import environ, mkdir
 from os.path import dirname, join
 
 import pytest
@@ -13,7 +13,11 @@ from anaconda_anon_usage import tokens, utils
 
 
 def _jsond(rec, urlsafe=False):
-    return base64.b64encode(json.dumps(rec).encode("ascii")).decode("ascii")
+    return (
+        base64.urlsafe_b64encode(json.dumps(rec).encode("ascii"))
+        .decode("ascii")
+        .rstrip("=")
+    )
 
 
 def _test_keyring():
@@ -22,12 +26,15 @@ def _test_keyring():
     for dom in domains:
         exp = exp + 123456
         sub = str(uuid.uuid4())
-        rec = {"exp": exp, "sub": sub}
-        api_key = "xxx." + _jsond(rec) + ".xxx"
+        header = {"alg": "RS256", "typ": "JWT"}
+        payload = {"exp": exp, "sub": sub}
+        # Not a real signature but we just need it to be a base64-encoded blob
+        signature = {"fake": dom}
+        api_key = ".".join(map(_jsond, (header, payload, signature)))
         rec = {"domain": dom, "api_key": api_key, "repo_tokens": [], "version": 2}
         drecs[dom] = _jsond(rec)
     result = {"Anaconda Cloud": drecs}
-    return json.dumps(result), sub
+    return json.dumps(result), sub, api_key
 
 
 @pytest.fixture
@@ -43,10 +50,18 @@ def aau_token_path():
 @pytest.fixture()
 def anaconda_uid(aau_token_path):
     kpath = join(dirname(aau_token_path), "keyring")
-    kstr, sub = _test_keyring()
+    kstr, sub, _ = _test_keyring()
     with open(kpath, "w") as fp:
         fp.write(kstr)
     yield sub
+
+
+@pytest.fixture()
+def anaconda_uid_env():
+    _, sub, api_key = _test_keyring()
+    environ["ANACONDA_AUTH_API_KEY"] = api_key
+    yield sub
+    del environ["ANACONDA_AUTH_API_KEY"]
 
 
 def _system_token_path(npaths=1):
@@ -100,6 +115,8 @@ def two_org_tokens(aau_token_path):
 
 @pytest.fixture(autouse=True)
 def client_token_string_cache_cleanup(request):
+    if "ANACONDA_AUTH_API_KEY" in environ:
+        del environ["ANACONDA_AUTH_API_KEY"]
     request.addfinalizer(utils._cache_clear)
 
 
