@@ -168,11 +168,29 @@ on Unix/macOS and `C:\ProgramData\conda\` on Windows:
   aggressive_update_packages: [anaconda-anon-usage]
   ```
 
+These tokens can also be activated using environment variables:
+
+- `org_token`: `ANACONDA_ANON_USAGE_ORG_TOKEN`
+- `machine_token`: `ANACONDA_ANON_USAGE_MACHINE_TOKEN`
+
+The environment variable approach may be appropriate in CI/CD systems or
+containerized workflows.
+
+Unlike the client, environment, and session tokens, it is possible to provide
+multiple organization or machine tokens. For example, one can be placed in
+`/etc/org_token` and another in an environment variable. When this occurs,
+all of them are included in the user agent string, to ensure that one does
+not shadow the other.
+
 For convenience, the `tokens` submodule includes a function to generate
 a random token ready for use as an organization or machine token:
 ```
 python -m anaconda_anon_usage.tokens --random
 ```
+Tokens can also be constructed manually, but must include only characters
+in the ranges `a-z`, `A-Z`, `0-9`, `-`, and `_`, and no spaces. A maximum
+length of 36 characters is also enforced, to help ensure that the total
+header length remains well within HTTP limits.
 
 ### Activation heartbeats
 

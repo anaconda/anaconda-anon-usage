@@ -6,6 +6,7 @@
 
 import base64
 import json
+import re
 import sys
 import uuid
 from collections import namedtuple
@@ -31,6 +32,10 @@ CONFIG_DIR = expanduser("~/.conda")
 ANACONDA_DIR = expanduser("~/.anaconda")
 ORG_TOKEN_NAME = "org_token"
 MACHINE_TOKEN_NAME = "machine_token"
+
+# System tokens may consist of only letters, numbers,
+# underscores, and dashes, with no more than 36 characters.
+VALID_TOKEN_RE = r"^(?:[A-Za-z0-9]|_|-){1,36}$"
 
 
 @cached
@@ -100,18 +105,27 @@ def _system_tokens(fname, what):
     along the path, in which case we combine them
     """
     tokens = []
+    env_name = "ANACONDA_ANON_USAGE_" + fname.upper()
+    t_token = environ.get(env_name)
+    if t_token:
+        _debug("Found %s token in environment: %s", what, t_token)
+        tokens.append(t_token)
     for path in _search_path():
         fpath = join(path, fname)
-        if not isfile(fpath):
-            continue
-        t_tokens = _read_file(fpath, what + " token", single_line=True)
-        if t_tokens:
-            for token in t_tokens.split("/"):
-                if token not in tokens:
-                    tokens.append(token)
+        if isfile(fpath):
+            t_token = _read_file(fpath, what + " token", single_line=True)
+            tokens.append(t_token)
+    # Deduplicate while preserving order
+    tokens = list(dict.fromkeys(t for t in tokens if t))
     if not tokens:
         _debug("No %s tokens found", what)
-    return tokens
+    # Make sure the tokens we omit have only valid characters, so any
+    # server-side token parsing is not frustrated.
+    valid = [t for t in tokens if re.match(VALID_TOKEN_RE, t)]
+    if len(valid) < len(tokens):
+        invalid = ", ".join(t for t in tokens if t not in valid)
+        _debug("One or more invalid %s tokens discarded: %s", what, invalid)
+    return valid
 
 
 @cached
