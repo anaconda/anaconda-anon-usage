@@ -113,11 +113,20 @@ def two_org_tokens(aau_token_path):
         yield t1 + t2[:1]
 
 
-@pytest.fixture(autouse=True)
-def client_token_string_cache_cleanup(request):
+def _env_clear():
     if "ANACONDA_AUTH_API_KEY" in environ:
         del environ["ANACONDA_AUTH_API_KEY"]
+    if "ANACONDA_ANON_USAGE_ORG_TOKEN" in environ:
+        del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
+    if "ANACONDA_ANON_USAGE_MACHINE_TOKEN" in environ:
+        del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
+
+
+@pytest.fixture(autouse=True)
+def client_token_string_cache_cleanup(request):
+    _env_clear()
     request.addfinalizer(utils._cache_clear)
+    request.addfinalizer(_env_clear)
 
 
 @pytest.fixture(autouse=True)

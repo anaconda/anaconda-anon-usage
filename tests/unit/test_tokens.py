@@ -140,8 +140,6 @@ def test_token_string_with_env_org_token(no_system_tokens):
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
     environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
     token_string = tokens.token_string()
-    del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
-    del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
     assert "o/" + org_token_e in token_string
     assert "m/" + mch_token_e in token_string
 
@@ -153,8 +151,6 @@ def test_token_string_with_system_and_env(system_tokens):
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
     environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
     token_string = tokens.token_string()
-    del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
-    del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
     assert "o/" + org_token in token_string
     assert "o/" + org_token_e in token_string
     assert "m/" + mch_token in token_string
@@ -169,8 +165,6 @@ def test_token_string_with_invalid_tokens(no_system_tokens):
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
     environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
     token_string = tokens.token_string()
-    del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
-    del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
     assert "o/" not in token_string
     assert "m/" not in token_string
 
