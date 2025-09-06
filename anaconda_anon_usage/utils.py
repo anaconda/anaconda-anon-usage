@@ -201,13 +201,19 @@ def _get_node_str():
     """
     Returns a base64-encoded representation of the host ID
     as determined by uuid.getnode().
+
+    Note:
+        - May return an empty string if the system cannot determine a MAC address.
+        - Some machines, virtual machines, or privacy-conscious OS configurations
+          may not expose a hardware MAC address, in which case the host ID is
+          unavailable.
     """
     val = uuid._unix_getnode() or uuid._windll_getnode()
     if val:
         val = val.to_bytes(6, byteorder=sys.byteorder)
         val = base64.urlsafe_b64encode(val)
         val = val.decode("ascii")
-    return val
+    return val or ""
 
 
 def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
