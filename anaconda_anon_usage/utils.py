@@ -201,6 +201,12 @@ def _get_node_str():
     """
     Returns a base64-encoded representation of the host ID
     as determined by uuid.getnode().
+
+    Note:
+        - This may return None if the system cannot determine a MAC address.
+        - Some machines, virtual machines, or privacy-conscious OS configurations
+          may not expose a hardware MAC address, in which case the host ID is
+          unavailable.
     """
     val = uuid._unix_getnode() or uuid._windll_getnode()
     if val:
@@ -238,6 +244,9 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
         npath = fpath + "_host"
         saved_node = _read_file(npath, "Host id", single_line=True) or ""
         true_node = saved_node or (xtra[0] if xtra else None)
+        if not current_node:
+            _debug("Host ID unavailable; regenerating token")
+            regenerate = True
         if regenerate or not true_node:
             pass
         elif true_node != current_node:
