@@ -203,6 +203,9 @@ def _get_node_str():
     as determined by uuid.getnode().
     """
     val = uuid._unix_getnode() or uuid._windll_getnode()
+    # https://github.com/anaconda/anaconda-anon-usage/pull/173
+    if not val and getattr(uuid, "_generate_time_safe", None):
+        val = uuid.UUID(bytes=uuid._generate_time_safe()[0]).node
     if val:
         val = val.to_bytes(6, byteorder=sys.byteorder)
         val = base64.urlsafe_b64encode(val)
@@ -254,6 +257,7 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
                 if true_node
                 else "Saving"
             )
+            current_node = current_node or ""
             _debug("%s host ID: %s", action, current_node)
             if _write_attempt(False, npath, current_node, False) == WRITE_DEFER:
                 DEFERRED.append((False, npath, current_node, "Host ID"))
