@@ -88,7 +88,7 @@ jobs:
         version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
         pkg="anaconda-anon-usage=$version"
         # This is to address an issue with Linux ARM Python 3.9 only
-        if [[ "${{ matrix.os }}" = ubuntu-*-arm ]]; then ppkg="python<3.9|>=3.10,<3.13"; else ppkg="python<3.13"; fi
+        if [[ "${{ matrix.os }}" = ubuntu-*-arm ]]; then ppkg="python<3.9|>=3.10"; else ppkg=""; fi
         echo "-------------------------"
         echo "UPDATING BASE ENVIRONMENT"
         echo "-------------------------"

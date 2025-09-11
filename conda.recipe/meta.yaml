@@ -41,6 +41,7 @@ test:
     - anaconda_anon_usage.tokens
   commands:
     - pip check
+    - ANACONDA_ANON_USAGE_DEBUG=1 conda info
     - conda info | grep -q "user-agent.* aau/"
 
 about:
