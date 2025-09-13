@@ -19,8 +19,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  testconda:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Upload to anaconda.org
+      env:
+        ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+        GITHUB_REF: ${{ github.ref }}
+      run: |
+        source $CONDA/bin/activate
+        conda info
+        conda list
+        conda config --set solver classic
+        conda install anaconda-client
+        conda list
+        exit -1
   build:
     runs-on: ubuntu-latest
+    needs: testconda
     steps:
     - name: Retrieve the source code
       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -179,7 +195,7 @@ jobs:
         GITHUB_REF: ${{ github.ref }}
       run: |
         source $CONDA/bin/activate
-        conda install anaconda-client
+        conda install 'anaconda-client>1.13.0'
         [[ "$GITHUB_REF" =~ ^refs/tags/ ]] || export LABEL="--label dev"
         packages=$(ls -1 conda-bld/*/*.{tar.bz2,conda} 2>/dev/null || :)
         anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL $packages --force
