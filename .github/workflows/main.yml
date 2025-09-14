@@ -179,7 +179,8 @@ jobs:
         GITHUB_REF: ${{ github.ref }}
       run: |
         source $CONDA/bin/activate
-        conda install anaconda-client
+        conda install 'anaconda-client>1.13.0'
         [[ "$GITHUB_REF" =~ ^refs/tags/ ]] || export LABEL="--label dev"
         packages=$(ls -1 conda-bld/*/*.{tar.bz2,conda} 2>/dev/null || :)
         anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL $packages --force
+
