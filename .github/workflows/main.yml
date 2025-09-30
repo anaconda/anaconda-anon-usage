@@ -53,13 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         # ubuntu-latest runs on x86_64, ubuntu-24.04-arm on arm64
-        # macos-13 defaults to osx-64, macos-14 defaults to osx-arm64
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
+        # macos-15-intel defaults to osx-64, macos-latest defaults to osx-arm64
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-latest, windows-latest]
         # 23.5.2 : last patch-based variant
         # 23.7.0 : first plugin-based variant, but conda info --envs --json is broken
         # 23.9.0 : last variant with the classic default solver
         # 23.10.0 : first variant with the libmamba default solver
-        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.10.0', '24.11.3', '25.3.1']
+        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.11.0', '24.11.3', '25.7.0']
     runs-on: ${{ matrix.os }}
     steps:
     - name: Retrieve the source code
@@ -92,6 +92,7 @@ jobs:
         echo "-------------------------"
         echo "UPDATING BASE ENVIRONMENT"
         echo "-------------------------"
+        if [ ${{ matrix.os }} = macos-15-intel ]; then conda remove --force anaconda-auth || :; fi
         conda install -c local anaconda-client constructor $pkg
         echo "-------------------------"
         echo "CREATING TEST ENVIRONMENT"
