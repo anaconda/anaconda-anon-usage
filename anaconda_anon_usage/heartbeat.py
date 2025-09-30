@@ -16,6 +16,8 @@ from urllib.parse import urljoin
 from conda.base.context import Context, context, locate_prefix_by_name
 from conda.gateways.connection.session import get_session
 from conda.models.channel import Channel
+from requests.exceptions import RequestException
+from urllib3.exceptions import HTTPError
 
 from . import utils
 
@@ -59,11 +61,16 @@ def _ping(session, url, timeout):
             "Success after %.3fs; code (expect 404): %d", delta, response.status_code
         )
     except Exception as exc:
-        if type(exc).__name__ != "ConnectionError":
-            _print("Unexpected heartbeat error: %s", exc, error=True)
-        elif "timeout=" in str(exc):
-            delta = time.perf_counter() - start_time
-            _print("NO heartbeat sent after %.3fs.", delta)
+        delta = time.perf_counter() - start_time
+
+        # Check if this is an expected network-related exception
+        # Requests exceptions cover most cases, urllib3 for lower-level errors,
+        # and standard library for fallback
+        if isinstance(exc, (RequestException, HTTPError, OSError, TimeoutError)):
+            _print("Heartbeat failed after %.3fs: %s", delta, type(exc).__name__)
+        else:
+            # Truly unexpected error - log even in non-debug mode
+            _print("Unexpected heartbeat error after %.3fs: %s", delta, exc, error=True)
 
 
 def attempt_heartbeat(prefix=None, dry_run=False, channel=None, path=None):
