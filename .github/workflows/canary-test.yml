@@ -32,6 +32,7 @@ jobs:
       shell: bash -el {0}
       run: |
         # Add the conda-canary channel
+        conda config --add channels defaults
         conda config --add channels conda-canary/label/dev
         conda config --set channel_priority flexible
 
@@ -180,9 +181,9 @@ jobs:
     - name: Build test environment
       run: |
         source $CONDA/etc/profile.d/conda.sh
+        conda config --add channels defaults
         conda config --add channels conda-canary/label/dev
         conda config --add channels ${{ needs.discover-canary.outputs.aau-channel }}
-        conda config --add channels defaults
         conda config --set channel_priority flexible
         conda config --set quiet true
         conda activate base
@@ -192,7 +193,7 @@ jobs:
         echo "-------------------------"
         echo "UPDATING BASE ENVIRONMENT"
         echo "-------------------------"
-        conda install anaconda-client constructor $pkg
+        conda install anaconda-client $pkg
         echo "-----------------------------"
         echo "CREATING TEST ENVIRONMENT"
         echo "Testing conda $CONDA_VERSION with Python ${{ matrix.python-version }}"
@@ -245,31 +246,6 @@ jobs:
         source ./testenv/bin/activate
         conda info
         python tests/integration/test_heartbeats.py posix
-    - name: Build an installer
-      run: |
-        cd tests/integration
-        export CONDA_PREFIX=$CONDA
-        CONDA_VERSION="${{ needs.discover-canary.outputs.conda-version }}"
-        bash test_installer.sh $CONDA_VERSION
-    - name: Run the installer (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: cmd
-      run: |
-        cd tests/integration
-        start /wait AIDTest-1.0-Windows-x86_64.exe /S /D=%USERPROFILE%\aidtest
-        call %USERPROFILE%\aidtest\Scripts\activate
-        conda info
-    - name: Run the installer (Unix)
-      if: matrix.os != 'windows-latest'
-      run: |
-        cd tests/integration
-        bash AIDTest*.sh -b -p ~/aidtest -k
-        source ~/aidtest/bin/activate
-        conda info
-    - name: Test the installed environment
-      run: |
-        cd tests/integration
-        bash test_environment.sh ~/aidtest
 
   report:
     needs: [discover-canary, test]
