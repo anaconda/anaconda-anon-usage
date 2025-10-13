@@ -16,134 +16,53 @@ jobs:
   discover-canary:
     runs-on: ubuntu-latest
     outputs:
-      conda-version: ${{ steps.discover.outputs.conda-version }}
+      conda-spec: ${{ steps.discover.outputs.conda-spec }}
       python-versions: ${{ steps.discover.outputs.python-versions }}
-      aau-version: ${{ steps.discover.outputs.aau-version }}
-      aau-channel: ${{ steps.discover.outputs.aau-channel }}
+      aau-spec: ${{ steps.discover.outputs.aau-spec }}
     steps:
     - name: Discover latest canary build
       id: discover
-      shell: bash -el {0}
+      shell: '/usr/share/miniconda/bin/python {0}'
       run: |
         # Search for conda packages in canary channel
-        source $CONDA/etc/profile.d/conda.sh
-        echo "Searching for latest conda canary build..."
-        conda search -c conda-canary/label/dev --override-channels conda --json > canary_search.json
+        import json, sys, io, os, re
+        from conda.cli.main import main
+        from conda.models.version import normalized_version
 
-        # Extract the latest version and build number
-        CONDA_VERSION=$(python -c "
-        import json, sys
-        with open('canary_search.json') as f:
-            data = json.load(f)
-        if 'conda' not in data or not data['conda']:
-            print('')  # Empty string to indicate no builds found
-            sys.exit(0)
-        # Get the last entry (latest version)
-        latest = data['conda'][-1]
-        print(latest['version'])
-        ")
+        _stdout, sys.stdout = sys.stdout, io.StringIO()
+        main('search', '-c', 'conda-canary', '-c', 'conda-canary/label/dev', '--override-channels', 'conda', '--json')
+        c_data, sys.stdout = sys.stdout.getvalue(), io.StringIO()
+        main('search', '-c', 'ctools', '-c', 'ctools/label/dev', '--override-channels', 'anaconda-anon-usage', '--json')
+        a_data, sys.stdout = sys.stdout.getvalue(), _stdout
 
-        if [ -z "$CONDA_VERSION" ]; then
-          echo "No canary builds found - skipping tests"
-          echo "conda-version=" >> $GITHUB_OUTPUT
-          echo "python-versions=[]" >> $GITHUB_OUTPUT
-          echo "aau-version=" >> $GITHUB_OUTPUT
-          echo "aau-channel=" >> $GITHUB_OUTPUT
-          exit 0
-        fi
+        c_data = json.loads(c_data)['conda']
+        if not c_data:
+          sys.exit(0)
 
-        echo "Latest canary version: $CONDA_VERSION"
-        echo "conda-version=$CONDA_VERSION" >> $GITHUB_OUTPUT
+        max_version = sorted((d['version'] for d in c_data), key=normalized_version)[-1]
+        channel = [d['channel'] for d in c_data if d['version'] == max_version]
+        channel = '/'.join(channel[0].split('/')[3:-1])
+        cspec = f'conda-spec={channel}::conda={max_version}'
 
-        # Discover Python versions this conda version is built for
-        echo "Discovering Python versions for conda $CONDA_VERSION..."
-        PYTHON_VERSIONS=$(python -c "
-        import json
-        with open('canary_search.json') as f:
-            data = json.load(f)
-        # Get all builds for the latest version
-        version = '$CONDA_VERSION'
-        builds = [b for b in data['conda'] if b['version'] == version]
-        # Extract unique Python versions from depends
-        py_versions = set()
-        for build in builds:
-            for dep in build.get('depends', []):
-                if dep.startswith('python '):
-                    # Extract version constraint like 'python >=3.9,<3.10'
-                    parts = dep.split('>=')[1].split(',')[0] if '>=' in dep else ''
-                    if parts:
-                        # Get major.minor version
-                        py_ver = '.'.join(parts.strip().split('.')[:2])
-                        py_versions.add(py_ver)
-        # Sort and output as JSON array
-        import json
-        print(json.dumps(sorted(list(py_versions))))
-        ")
+        builds = [b['build'] for b in c_data if b['version'] == max_version]
+        py_versions = set(re.sub(r'py3(\d+).*', r'3.\1', b) for b in builds)
+        py_versions = json.dumps(sorted(py_versions, key=normalized_version))
+        pspec = f'python-versions={py_versions}'
 
-        echo "Python versions: $PYTHON_VERSIONS"
-        echo "python-versions=$PYTHON_VERSIONS" >> $GITHUB_OUTPUT
+        a_data = json.loads(a_data)['anaconda-anon-usage']
+        max_version = sorted((d['version'] for d in a_data), key=normalized_version)[-1]
+        channel = [d['channel'] for d in a_data if d['version'] == max_version]
+        channel = '/'.join(channel[0].split('/')[3:-1])
+        aspec = f'aau-spec={channel}::anaconda-anon-usage={max_version}'
 
-        # Discover latest anaconda-anon-usage build from ctools
-        echo "Searching for latest anaconda-anon-usage build..."
-        # Try dev channel first, fall back to main
-        conda search -c ctools/label/dev --override-channels anaconda-anon-usage --json > aau_dev_search.json || echo '{}' > aau_dev_search.json
-        conda search -c ctools --override-channels anaconda-anon-usage --json > aau_main_search.json || echo '{}' > aau_main_search.json
-
-        AAU_INFO=$(python -c "
-        import json, sys
-        with open('aau_dev_search.json') as f:
-            dev_data = json.load(f)
-        with open('aau_main_search.json') as f:
-            main_data = json.load(f)
-
-        # Get the latest from each channel
-        dev_builds = dev_data.get('anaconda-anon-usage', [])
-        main_builds = main_data.get('anaconda-anon-usage', [])
-
-        if not dev_builds and not main_builds:
-            print('')  # Empty string to indicate no builds found
-            sys.exit(0)
-
-        # Compare and choose the latest
-        latest_dev = dev_builds[-1] if dev_builds else None
-        latest_main = main_builds[-1] if main_builds else None
-
-        if latest_dev and latest_main:
-            # Compare build numbers if versions are the same
-            if latest_dev['version'] == latest_main['version']:
-                latest = latest_dev if latest_dev['build_number'] > latest_main['build_number'] else latest_main
-                channel = 'ctools/label/dev' if latest == latest_dev else 'ctools'
-            else:
-                # Use simple version comparison
-                latest = latest_dev if latest_dev['version'] > latest_main['version'] else latest_main
-                channel = 'ctools/label/dev' if latest == latest_dev else 'ctools'
-        elif latest_dev:
-            latest = latest_dev
-            channel = 'ctools/label/dev'
-        else:
-            latest = latest_main
-            channel = 'ctools'
-
-        print(f\"{latest['version']}|{channel}\")
-        ")
-
-        AAU_VERSION=$(echo "$AAU_INFO" | cut -d'|' -f1)
-        AAU_CHANNEL=$(echo "$AAU_INFO" | cut -d'|' -f2)
-
-        if [ -z "$AAU_VERSION" ]; then
-          echo "No anaconda-anon-usage builds found - skipping tests"
-          echo "aau-version=" >> $GITHUB_OUTPUT
-          echo "aau-channel=" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        echo "Latest anaconda-anon-usage version: $AAU_VERSION from $AAU_CHANNEL"
-        echo "aau-version=$AAU_VERSION" >> $GITHUB_OUTPUT
-        echo "aau-channel=$AAU_CHANNEL" >> $GITHUB_OUTPUT
+        specs = f"{cspec}\n{pspec}\n{aspec}\n"
+        print(specs)
+        with open(os.getenv("GITHUB_OUTPUT"), "a") as fp:
+            fp.write(specs)
 
   test:
     needs: discover-canary
-    if: needs.discover-canary.outputs.aau-version != ''
+    if: needs.discover-canary.outputs.aau-spec != '' && needs.discover-canary.outputs.conda-spec != ''
     env:
       ANACONDA_ANON_USAGE_DEBUG: 1
       ANACONDA_ANON_USAGE_RAISE: 1
@@ -171,18 +90,13 @@ jobs:
         channels: defaults
     - name: Build test environment
       run: |
-        AAU_VERSION="${{ needs.discover-canary.outputs.aau-version }}"
-        CONDA_VERSION="${{ needs.discover-canary.outputs.conda-version }}"
+        cspec=${{ needs.discover-canary.outputs.conda-spec }}
+        aspec=${{ needs.discover-canary.outputs.aau-spec }}
+        pspec="python=${{ matrix.python-version }}"
         echo "-----------------------------"
-        echo "CREATING TEST ENVIRONMENT"
-        echo "Testing conda $CONDA_VERSION with Python ${{ matrix.python-version }}"
-        echo "Testing anaconda-anon-usage $AAU_VERSION"
+        echo "CREATING BASE: $cspec $aspec $pspec"
         echo "-----------------------------"
-        conda create -p ./testenv -c conda-canary/label/dev -c ${{ needs.discover-canary.outputs.aau-channel }} \
-          python=${{ matrix.python-version }} \
-          anaconda-anon-usage=$AAU_VERSION \
-          conda=$CONDA_VERSION \
-          --file tests/requirements.txt
+        conda create -p ./testenv $aspec $cspec $pspec --file tests/requirements.txt
         echo "-------------------------"
         echo "CREATING TEST CHILD ENV 1"
         echo "-------------------------"
