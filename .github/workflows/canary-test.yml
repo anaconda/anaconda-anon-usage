@@ -27,15 +27,12 @@ jobs:
         miniconda-version: 'latest'
         auto-activate-base: true
         activate-environment: ""
+        channels: conda-canary/label/dev,defaults
+        channel-priority: flexible
     - name: Discover latest canary build
       id: discover
       shell: bash -el {0}
       run: |
-        # Add the conda-canary channel
-        conda config --add channels defaults
-        conda config --add channels conda-canary/label/dev
-        conda config --set channel_priority flexible
-
         # Search for conda packages in canary channel
         echo "Searching for latest conda canary build..."
         conda search -c conda-canary/label/dev --override-channels conda --json > canary_search.json
@@ -178,22 +175,12 @@ jobs:
         miniconda-version: 'latest'
         auto-activate-base: true
         activate-environment: ""
+        channels: ${{ needs.discover-canary.outputs.aau-channel }},conda-canary/label/dev,defaults
+        channel-priority: flexible
     - name: Build test environment
       run: |
-        source $CONDA/etc/profile.d/conda.sh
-        conda config --add channels defaults
-        conda config --add channels conda-canary/label/dev
-        conda config --add channels ${{ needs.discover-canary.outputs.aau-channel }}
-        conda config --set channel_priority flexible
-        conda config --set quiet true
-        conda activate base
         AAU_VERSION="${{ needs.discover-canary.outputs.aau-version }}"
         CONDA_VERSION="${{ needs.discover-canary.outputs.conda-version }}"
-        pkg="anaconda-anon-usage=$AAU_VERSION"
-        echo "-------------------------"
-        echo "UPDATING BASE ENVIRONMENT"
-        echo "-------------------------"
-        conda install anaconda-client $pkg
         echo "-----------------------------"
         echo "CREATING TEST ENVIRONMENT"
         echo "Testing conda $CONDA_VERSION with Python ${{ matrix.python-version }}"
@@ -201,7 +188,7 @@ jobs:
         echo "-----------------------------"
         conda create -p ./testenv -c conda-canary/label/dev -c ${{ needs.discover-canary.outputs.aau-channel }} \
           python=${{ matrix.python-version }} \
-          $pkg \
+          anaconda-anon-usage=$AAU_VERSION \
           conda=$CONDA_VERSION \
           --file tests/requirements.txt
         echo "-------------------------"
