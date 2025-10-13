@@ -21,19 +21,12 @@ jobs:
       aau-version: ${{ steps.discover.outputs.aau-version }}
       aau-channel: ${{ steps.discover.outputs.aau-channel }}
     steps:
-    - name: Setup Miniconda
-      uses: conda-incubator/setup-miniconda@835234971496cad1653abb28a638a281cf32541f # v3.2.0
-      with:
-        miniconda-version: 'latest'
-        auto-activate-base: true
-        activate-environment: ""
-        channels: conda-canary/label/dev,defaults
-        channel-priority: flexible
     - name: Discover latest canary build
       id: discover
       shell: bash -el {0}
       run: |
         # Search for conda packages in canary channel
+        source $CONDA/etc/profile.d/conda.sh
         echo "Searching for latest conda canary build..."
         conda search -c conda-canary/label/dev --override-channels conda --json > canary_search.json
 
@@ -174,9 +167,8 @@ jobs:
       with:
         miniconda-version: 'latest'
         auto-activate-base: true
-        activate-environment: ""
-        channels: ${{ needs.discover-canary.outputs.aau-channel }},conda-canary/label/dev,defaults
-        channel-priority: flexible
+        activate-environment: ''
+        channels: defaults
     - name: Build test environment
       run: |
         AAU_VERSION="${{ needs.discover-canary.outputs.aau-version }}"

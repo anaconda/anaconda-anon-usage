@@ -76,13 +76,12 @@ jobs:
       with:
         miniconda-version: 'latest'
         auto-activate-base: true
-        activate-environment: ""
+        activate-environment: true
+        python-version: 3.12
+        channels: local,defaults,conda-forge
+        # conda-forge is needed to pick up the noarch build of proxyspy
     - name: Build test environments
       run: |
-        source $CONDA/etc/profile.d/conda.sh
-        conda config --add channels defaults
-        conda config --set quiet true
-        conda activate base
         rm -rf $CONDA/conda-bld || :
         mv conda-bld $CONDA/
         version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
@@ -93,11 +92,11 @@ jobs:
         echo "UPDATING BASE ENVIRONMENT"
         echo "-------------------------"
         if [ ${{ matrix.os }} = macos-15-intel ]; then conda remove --force anaconda-auth || :; fi
-        conda install -c local anaconda-client constructor $pkg
+        conda install anaconda-client constructor $pkg
         echo "-------------------------"
         echo "CREATING TEST ENVIRONMENT"
         echo "-------------------------"
-        conda create -p ./testenv -c local $ppkg $pkg conda==${{ matrix.cversion }} --file tests/requirements.txt
+        conda create -p ./testenv $ppkg $pkg conda==${{ matrix.cversion }} --file tests/requirements.txt
         echo "-------------------------"
         echo "CREATING TEST CHILD ENV 1"
         echo "-------------------------"
@@ -120,14 +119,14 @@ jobs:
         pytest
         python tests/integration/test_config.py
     - name: Test heartbeats (pwsh)
-      if: matrix.os == 'windows-latest' && (matrix.cversion == '25.1.1' || matrix.cversion == '24.11.3')
+      if: matrix.os == 'windows-latest' && (matrix.cversion == '25.7.0' || matrix.cversion == '24.11.3')
       shell: pwsh
       run: |
         .\testenv\shell\condabin\conda-hook.ps1
         conda activate base
         python tests\integration\test_heartbeats.py powershell
     - name: Test heartbeats (cmd)
-      if: matrix.os == 'windows-latest' && (matrix.cversion == '25.1.1' || matrix.cversion == '24.11.3')
+      if: matrix.os == 'windows-latest' && (matrix.cversion == '25.7.0' || matrix.cversion == '24.11.3')
       shell: cmd
       run: |
         call .\testenv\Scripts\activate.bat
@@ -135,7 +134,7 @@ jobs:
         python tests\integration\test_heartbeats.py cmd.exe
         if %errorlevel% neq 0 exit 1
     - name: Test heartbeats (bash)
-      if: matrix.os != 'windows-latest' && (matrix.cversion == '25.1.1' || matrix.cversion == '24.11.3')
+      if: matrix.os != 'windows-latest' && (matrix.cversion == '25.7.0' || matrix.cversion == '24.11.3')
       run: |
         source ./testenv/bin/activate
         conda info
