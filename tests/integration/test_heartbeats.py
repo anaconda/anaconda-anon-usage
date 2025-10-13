@@ -135,7 +135,7 @@ for hval in ("true", "false", "alturl", "delay"):
                 text=True,
             )
             header = status = ""
-            t_host = re.search(r"^.* CONNECT (.*) HTTP/1.1$", proc.stdout, re.MULTILINE)
+            t_host = re.search(r"^.* CONNECT (.*) HTTP/1..$", proc.stdout, re.MULTILINE)
             t_host = t_host.groups()[0] if t_host else ""
             t_path = re.search(r"^.* HEAD (.*) HTTP/1.1$", proc.stdout, re.MULTILINE)
             t_path = t_path.groups()[0] if t_path else ""
