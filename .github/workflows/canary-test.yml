@@ -147,36 +147,45 @@ jobs:
     steps:
     - name: Report results
       run: |
-        CONDA_VERSION="${{ needs.discover-canary.outputs.conda-version }}"
+        echo "=== Debug: Job Outputs ==="
+        echo "CONDA_SPEC: '${{ needs.discover-canary.outputs.conda-spec }}'"
+        echo "AAU_SPEC: '${{ needs.discover-canary.outputs.aau-spec }}'"
+        echo "PYTHON_VERSIONS: '${{ needs.discover-canary.outputs.python-versions }}'"
+        echo "TEST_RESULT: '${{ needs.test.result }}'"
+        echo "DISCOVER_RESULT: '${{ needs.discover-canary.result }}'"
+        echo "=========================="
+
+        CONDA_SPEC="${{ needs.discover-canary.outputs.conda-spec }}"
+        AAU_SPEC="${{ needs.discover-canary.outputs.aau-spec }}"
         PYTHON_VERSIONS="${{ needs.discover-canary.outputs.python-versions }}"
-        AAU_VERSION="${{ needs.discover-canary.outputs.aau-version }}"
-        AAU_CHANNEL="${{ needs.discover-canary.outputs.aau-channel }}"
         TEST_RESULT="${{ needs.test.result }}"
 
         echo "## Canary Build Test Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
         # Check if builds were found
-        if [ -z "$CONDA_VERSION" ] || [ -z "$AAU_VERSION" ]; then
+        if [ -z "$CONDA_SPEC" ] || [ -z "$AAU_SPEC" ]; then
           echo "ℹ️ No canary builds available - tests skipped" >> $GITHUB_STEP_SUMMARY
-          if [ -z "$CONDA_VERSION" ]; then
-            echo "- No conda canary builds found in conda-canary/label/dev" >> $GITHUB_STEP_SUMMARY
+          if [ -z "$CONDA_SPEC" ]; then
+            echo "- No conda canary builds found in conda-canary channels" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ -z "$AAU_VERSION" ]; then
+          if [ -z "$AAU_SPEC" ]; then
             echo "- No anaconda-anon-usage builds found in ctools channels" >> $GITHUB_STEP_SUMMARY
           fi
           exit 0
         fi
 
-        echo "- **Conda Version:** $CONDA_VERSION" >> $GITHUB_STEP_SUMMARY
+        echo "- **Conda:** $CONDA_SPEC" >> $GITHUB_STEP_SUMMARY
         echo "- **Python Versions Tested:** $PYTHON_VERSIONS" >> $GITHUB_STEP_SUMMARY
-        echo "- **anaconda-anon-usage Version:** $AAU_VERSION (from $AAU_CHANNEL)" >> $GITHUB_STEP_SUMMARY
+        echo "- **anaconda-anon-usage:** $AAU_SPEC" >> $GITHUB_STEP_SUMMARY
         echo "- **Test Result:** $TEST_RESULT" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
-        if [ "$TEST_RESULT" != "success" ]; then
-          echo "⚠️ Tests failed for conda canary build $CONDA_VERSION" >> $GITHUB_STEP_SUMMARY
+        if [ "$TEST_RESULT" == "skipped" ]; then
+          echo "⏭️ Tests were skipped (no builds available)" >> $GITHUB_STEP_SUMMARY
+        elif [ "$TEST_RESULT" != "success" ]; then
+          echo "⚠️ Tests failed for $CONDA_SPEC" >> $GITHUB_STEP_SUMMARY
           exit 1
         else
-          echo "✅ All tests passed for conda canary build $CONDA_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All tests passed for $CONDA_SPEC" >> $GITHUB_STEP_SUMMARY
         fi
