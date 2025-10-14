@@ -1,4 +1,4 @@
 pytest
 pytest-cov
 pytest-mock
-conda-forge::proxyspy>=0.1.4
+proxyspy>=0.1.4
