@@ -72,7 +72,12 @@ for env in envs:
     all_modes.append("e/" + env)
 maxlen = max(6, max(len(e) for e in envs))
 
-COMMANDS = [["install", "fakepackage"], ["search", "fakepackage"], ["update", "--all"]]
+COMMANDS = [
+    ["install", "fakepackage"],
+    ["search", "fakepackage"],
+    ["update", "python"],
+    ["remove", "python"],
+]
 
 first = True
 other_tokens = {}
