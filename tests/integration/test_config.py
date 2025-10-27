@@ -72,6 +72,13 @@ for env in envs:
     all_modes.append("e/" + env)
 maxlen = max(6, max(len(e) for e in envs))
 
+COMMANDS = [
+    ["install", "fakepackage"],
+    ["search", "fakepackage"],
+    ["update", "python"],
+    ["remove", "python"],
+]
+
 first = True
 other_tokens = {}
 all_sessions = set()
@@ -86,99 +93,100 @@ for ctype in ("env", "cfg"):
         if mode == "default" and ctype == "env":
             continue
         enabled = _config(mode, ctype)
-        # Using proxyspy allows us to test this without the requests actually
-        # making it to repo.anaconda.com. The tester returns 404 for all requests.
-        # It also has the advantage of making sure our code respects proxies
-        # fmt: off
-        cmd = ["proxyspy", "--return-code", "404", "--",
-               "conda", "install", "--override-channels",
-               "-c", "defaults", "fakepackage"]
-        # fmt: on
-        if envname:
-            cmd.extend(["-n", envname])
-        skip = False
-        proc = subprocess.run(
-            cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        match = re.search(r"^.*User-Agent: (.+)$", proc.stdout, re.MULTILINE)
-        user_agent = match.groups()[0] if match else ""
-        if first:
-            if user_agent:
-                print(user_agent)
-            print("")
-            print("Configuration tests")
-            print("-" * (maxlen + 19))
-            first = False
-        if not user_agent or skip:
-            print(f"{ctype} {mode:<7} | {envname:{maxlen}} | ERROR")
-            for line in proc.stderr.splitlines():
-                if line.strip():
-                    print("|", line)
-            if user_agent:
-                print("|", user_agent)
-            nfailed += 1
-            if FAST_EXIT:
-                break
-            continue
-        tokens = {}
-        for tok in user_agent.split():
-            if "/" in tok:
-                k, v = tok.split("/", 1)
-                if k in all_tokens:
-                    tokens.setdefault(k, []).append(v)
-        status = []
-        expected = all_tokens if enabled else aau_only
-        missing = expected - set(tokens)
-        extras = set(tokens) - expected
-        if missing:
-            status.append(f"MISSING: {'/'.join(missing)}")
-        if extras:
-            status.append(f"NOT CLEARED: {'/'.join(extras)}")
-        modified = []
-        duplicated = []
-        repeated = []
-        for k, v in tokens.items():
-            if k not in multi_tokens:
-                if len(v) > 1:
-                    repeated.append(k)
+        for cmd in COMMANDS:
+            cmd1 = cmd[0]
+            if envname:
+                if cmd1 == "search":
                     continue
-                v = v[0]
-            if k == "s":
-                if v in all_sessions:
-                    duplicated.append("s")
-                all_sessions.add(v)
+                cmd.extend(["-n", envname])
+            cmd.extend(["--override-channels", "-c", "defaults"])
+            # Using proxyspy allows us to test this without the requests actually
+            # making it to repo.anaconda.com. The tester returns 404 for all requests.
+            # It also has the advantage of making sure our code respects proxies
+            cmd = ["proxyspy", "--return-code", "404", "--", "conda"] + cmd
+            skip = False
+            proc = subprocess.run(
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            match = re.search(r"^.*User-Agent: (.+)$", proc.stdout, re.MULTILINE)
+            user_agent = match.groups()[0] if match else ""
+            if first:
+                if user_agent:
+                    print(user_agent)
+                print("")
+                print("Configuration tests")
+                print("-" * (maxlen + 27))
+                first = False
+            if not user_agent or skip:
+                print(f"{ctype} {mode:<7} | {envname:{maxlen}} | ERROR")
+                for line in proc.stderr.splitlines():
+                    if line.strip():
+                        print("|", line)
+                if user_agent:
+                    print("|", user_agent)
+                nfailed += 1
+                if FAST_EXIT:
+                    break
                 continue
-            if k == "e":
-                k = "e/" + (envname or "base")
-                if k not in other_tokens and v in all_environments:
-                    duplicated.append("e")
-                all_environments.add(v)
-            if other_tokens.setdefault(k, v) != v:
-                modified.append(k)
-        if repeated:
-            status.append(f"REPEATED: {','.join(repeated)}")
-        if duplicated:
-            status.append(f"DUPLICATED: {','.join(duplicated)}")
-        if modified:
-            status.append(f"MODIFIED: {','.join(modified)}")
-        if status:
-            nfailed += 1
-            status = ", ".join(status)
-        else:
-            status = "OK"
-        emsg = envname or "<base>"
-        print(f"{ctype} {mode:<7} | {emsg:{maxlen}} | {status}")
-        if DEBUG_PREFIX:
-            for line in proc.stderr.splitlines():
-                if line.startswith(DEBUG_PREFIX):
-                    print("|", line[4:])
-        if status != "OK" or DEBUG_PREFIX:
-            print("|", user_agent)
-        if status != "OK" and FAST_EXIT:
-            break
+            tokens = {}
+            for tok in user_agent.split():
+                if "/" in tok:
+                    k, v = tok.split("/", 1)
+                    if k in all_tokens:
+                        tokens.setdefault(k, []).append(v)
+            status = []
+            expected = all_tokens if enabled else aau_only
+            missing = expected - set(tokens)
+            extras = set(tokens) - expected
+            if missing:
+                status.append(f"MISSING: {'/'.join(missing)}")
+            if extras:
+                status.append(f"NOT CLEARED: {'/'.join(extras)}")
+            modified = []
+            duplicated = []
+            repeated = []
+            for k, v in tokens.items():
+                if k not in multi_tokens:
+                    if len(v) > 1:
+                        repeated.append(k)
+                        continue
+                    v = v[0]
+                if k == "s":
+                    if v in all_sessions:
+                        duplicated.append("s")
+                    all_sessions.add(v)
+                    continue
+                if k == "e":
+                    k = "e/" + (envname or "base")
+                    if k not in other_tokens and v in all_environments:
+                        duplicated.append("e")
+                    all_environments.add(v)
+                if other_tokens.setdefault(k, v) != v:
+                    modified.append(k)
+            if repeated:
+                status.append(f"REPEATED: {','.join(repeated)}")
+            if duplicated:
+                status.append(f"DUPLICATED: {','.join(duplicated)}")
+            if modified:
+                status.append(f"MODIFIED: {','.join(modified)}")
+            if status:
+                nfailed += 1
+                status = ", ".join(status)
+            else:
+                status = "OK"
+            emsg = envname or "<base>"
+            print(f"{ctype} {cmd1:<7} {mode:<7} | {emsg:{maxlen}} | {status}")
+            if DEBUG_PREFIX:
+                for line in proc.stderr.splitlines():
+                    if line.startswith(DEBUG_PREFIX):
+                        print("|", line[4:])
+            if status != "OK" or DEBUG_PREFIX:
+                print("|", user_agent)
+            if status != "OK" and FAST_EXIT:
+                break
 print("-" * (maxlen + 19))
 
 print("")

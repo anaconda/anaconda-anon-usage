@@ -59,7 +59,14 @@ jobs:
         # 23.7.0 : first plugin-based variant, but conda info --envs --json is broken
         # 23.9.0 : last variant with the classic default solver
         # 23.10.0 : first variant with the libmamba default solver
-        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.11.0', '24.11.3', '25.7.0']
+        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.11.0', '24.11.3', '25.9.1']
+        # Use the last Anaconda-released version of conda on osx-64
+        exclude:
+          - os: macos-15-intel
+            cversion: '25.9.1'
+        include:
+          - os: macos-15-intel
+            cversion: '25.7.0'
     runs-on: ${{ matrix.os }}
     steps:
     - name: Retrieve the source code
