@@ -4,16 +4,14 @@
 # conda must be avoided so that this package can be used in
 # child environments.
 
-import base64
-import json
 import re
 import sys
-import uuid
 from collections import namedtuple
 from os import environ
 from os.path import expanduser, isdir, isfile, join
 
 from . import __version__
+from .api_key import get_api_key
 from .utils import _debug, _random_token, _read_file, _saved_token, cached
 
 Tokens = namedtuple(
@@ -178,97 +176,18 @@ def environment_token(prefix=None):
     return _saved_token(fpath, "environment", prefix)
 
 
-def _jwt_to_token(s):
-    """Unpacks an Anaconda auth token and returns the encoded user ID for
-    potential inclusion in the user agent, along with its expiration.
-
-    The Anaconda API key takes the form of a standard OAuth2 access token,
-    with the additional requirement that the "sub" field is a UUID string.
-    This code perorms a basic set of integrity checks to confirm that this
-    is the case. If the checks pass, the function returns an encoded form
-    of "sub" as well as the "exp" value to enable sorting by expiration.
-    If the checks fail, the function returns (None, 0).
-
-    The signature is not fully validated as part of the check; only that it
-    is a base64-encoded value. Validation is left to anaconda-auth.
-
-    Returns:
-      token: the token if valid; None otherwise
-      exp: the expiration time
-    """
-    if not s:
-        return None, 0
-    try:
-        # The JWT should have three parts separated by periods
-        parts = s.split(".")
-        assert len(parts) == 3 and all(parts), "3 parts expected"
-        # Each part should be base64 encoded
-        parts = list(map(lambda x: base64.urlsafe_b64decode(x + "==="), parts))
-        # The header and payload should be json dictionaries
-        parts = list(map(json.loads, parts[:2]))
-        assert isinstance(parts[0], dict), "Invalid header"
-        assert parts[0].get("typ") == "JWT", "Invalid header"
-        assert isinstance(parts[1], dict), "Invalid payload"
-        # The payload should have a positive integer expiration
-        exp = parts[1].get("exp")
-        assert isinstance(exp, int) and exp > 0, "Invalid expiration"
-        # The subscriber should be a non-empty UUID string
-        sub = parts[1].get("sub")
-        assert sub, "Invalid subscriber"
-        # This is an Anaconda requirement, not a JWT requirement
-        sub = uuid.UUID(sub).bytes
-        token = base64.urlsafe_b64encode(sub).decode("ascii").strip("=")
-        return token, exp
-    except Exception as exc:
-        _debug("Unexpected %s parsing API key: %s", type(exc), exc)
-        return None, 0
-
-
 @cached
 def anaconda_auth_token():
-    """Retrieve Anaconda Cloud token from keyring.
-
-    Examines all entries under 'Anaconda Cloud' in the keyring and
-    selects the token with the latest expiration date. This handles
-    migration from 'anaconda.cloud' to 'anaconda.com' entries.
-
+    """Returns the base64-encoded uid corresponding to the logged
+    in Anaconda Cloud user, if one is present.
     Returns:
         str: Base64-encoded token, or None if no valid token found.
     """
-    env = environ.get("ANACONDA_AUTH_API_KEY")
-    if env:
-        _debug("ANACONDA_AUTH_API_KEY environment variable found")
-        token, _ = _jwt_to_token(env)
-        if token:
-            _debug("Retrieved Anaconda token from environment: %s", token)
-            return token
-        _debug("Could not retrieve API key from environment")
-    fpath = expanduser(join(ANACONDA_DIR, "keyring"))
-    data = _read_file(fpath, "anaconda keyring")
-    if not data:
-        return
-    try:
-        data = json.loads(data)
-    except Exception as exc:
-        _debug("Unexpected JSON decoding error parsing keyring file: %s", exc)
-        return
-    if not data or not isinstance(data, dict):
-        _debug("Empty keyring")
-        return
-    token, exp = None, 0
-    for key, rec in (data.get("Anaconda Cloud") or {}).items():
-        try:
-            tdata = json.loads(base64.b64decode(rec))["api_key"]
-        except Exception as exc:
-            _debug("Unexpected error parsing keyring entry '%s': %s", key, exc)
-        t_token, t_exp = _jwt_to_token(tdata)
-        if t_exp > exp:
-            token = t_token
-            exp = t_exp
+    _, token = get_api_key()
     if token:
-        _debug("Retrieved Anaconda token from keyring: %s", token)
+        _debug("Retrieved Anaconda API key for UUID: %s", token)
     else:
-        _debug("No Anaconda keyring records found")
+        _debug("No Anaconda API key found")
     return token
 
 

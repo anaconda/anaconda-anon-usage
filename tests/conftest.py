@@ -1,4 +1,5 @@
 import base64
+import datetime as dt
 import json
 import tempfile
 import uuid
@@ -11,20 +12,27 @@ from conda.base.context import Context, context
 
 from anaconda_anon_usage import tokens, utils
 
-
-def _jsond(rec, urlsafe=False):
-    return (
-        base64.urlsafe_b64encode(json.dumps(rec).encode("ascii"))
-        .decode("ascii")
-        .rstrip("=")
-    )
+try:
+    from anaconda_auth.token import AnacondaKeyring
+except ImportError:
+    AnacondaKeyring = None
 
 
-def _test_keyring():
+def _jsond(rec, strip=True):
+    result = json.dumps(rec)
+    result = base64.urlsafe_b64encode(result.encode("ascii"))
+    result = result.decode("ascii")
+    if strip:
+        result = result.rstrip("=")
+    return result
+
+
+def _keyring_data():
     domains = ["random.domain", "anaconda.cloud", "anaconda.com"]
     drecs, exp = {}, 0
+    exp = int(dt.datetime.now(tz=dt.timezone.utc).timestamp()) + 7884000
     for dom in domains:
-        exp = exp + 123456
+        exp = exp - 1
         sub = str(uuid.uuid4())
         header = {"alg": "RS256", "typ": "JWT"}
         payload = {"exp": exp, "sub": sub}
@@ -32,36 +40,77 @@ def _test_keyring():
         signature = {"fake": dom}
         api_key = ".".join(map(_jsond, (header, payload, signature)))
         rec = {"domain": dom, "api_key": api_key, "repo_tokens": [], "version": 2}
-        drecs[dom] = _jsond(rec)
+        # anaconda_auth doesn't like it when we strip the padding
+        drecs[dom] = _jsond(rec, strip=False)
     result = {"Anaconda Cloud": drecs}
     return json.dumps(result), sub, api_key
 
 
+# These features are chained together in order to test that
+# the API key search priority is correct.
+
+
 @pytest.fixture
-def aau_token_path():
-    old_dir, old_adir = tokens.CONFIG_DIR, tokens.ANACONDA_DIR
-    with tempfile.TemporaryDirectory() as tname:
-        tokens.CONFIG_DIR = tokens.ANACONDA_DIR = tname
-        yield join(tname, "aau_token")
-    tokens.CONFIG_DIR = old_dir
-    tokens.ANACONDA_DIR = old_adir
-
-
-@pytest.fixture()
-def anaconda_uid(aau_token_path):
-    kpath = join(dirname(aau_token_path), "keyring")
-    kstr, sub, _ = _test_keyring()
-    with open(kpath, "w") as fp:
+def keyring_in_file(aau_token_path):
+    kstr, sub, _ = _keyring_data()
+    with open(environ["ANACONDA_KEYRING_PATH"], "w") as fp:
         fp.write(kstr)
-    yield sub
+    return sub
 
 
-@pytest.fixture()
-def anaconda_uid_env():
-    _, sub, api_key = _test_keyring()
-    environ["ANACONDA_AUTH_API_KEY"] = api_key
-    yield sub
-    del environ["ANACONDA_AUTH_API_KEY"]
+@pytest.fixture
+def keyring_in_secret(aau_token_path, keyring_in_file):
+    fpath = join(environ["ANACONDA_SECRETS_DIR"], "anaconda_auth_keyring")
+    kstr, sub, _ = _keyring_data()
+    with open(fpath, "w") as fp:
+        fp.write(kstr)
+    return sub
+
+
+@pytest.fixture
+def keyring_in_env(monkeypatch, keyring_in_secret):
+    kstr, sub, _ = _keyring_data()
+    monkeypatch.setenv("ANACONDA_AUTH_KEYRING", kstr)
+    return sub
+
+
+@pytest.fixture
+def keyring_in_module(monkeypatch, keyring_in_file):
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_STANDALONE", "")
+    return keyring_in_file
+
+
+@pytest.fixture
+def api_key_in_secret(keyring_in_env):
+    fpath = join(environ["ANACONDA_SECRETS_DIR"], "anaconda_auth_api_key")
+    _, sub, api_key = _keyring_data()
+    with open(fpath, "w") as fp:
+        fp.write(api_key)
+    return sub
+
+
+@pytest.fixture
+def api_key_in_env(monkeypatch, api_key_in_secret):
+    _, sub, api_key = _keyring_data()
+    monkeypatch.setenv("ANACONDA_AUTH_API_KEY", api_key)
+    return sub
+
+
+@pytest.fixture
+def aau_token_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(tokens, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(tokens, "ANACONDA_DIR", str(tmp_path))
+    keyring_dir = tmp_path / "anaconda"
+    secret_dir = tmp_path / "secrets"
+    keyring_dir.mkdir()
+    secret_dir.mkdir()
+    keyring_path = keyring_dir / "keyring"
+    if AnacondaKeyring is not None:
+        monkeypatch.setattr(AnacondaKeyring, "keyring_path", keyring_path)
+    monkeypatch.setenv("ANACONDA_KEYRING_PATH", str(keyring_path))
+    monkeypatch.setenv("ANACONDA_SECRETS_DIR", str(secret_dir))
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_STANDALONE", "1")
+    return str(tmp_path / "aau_token")
 
 
 def _system_token_path(npaths=1):
@@ -113,20 +162,9 @@ def two_org_tokens(aau_token_path):
         yield t1 + t2[:1]
 
 
-def _env_clear():
-    if "ANACONDA_AUTH_API_KEY" in environ:
-        del environ["ANACONDA_AUTH_API_KEY"]
-    if "ANACONDA_ANON_USAGE_ORG_TOKEN" in environ:
-        del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
-    if "ANACONDA_ANON_USAGE_MACHINE_TOKEN" in environ:
-        del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
-
-
 @pytest.fixture(autouse=True)
 def client_token_string_cache_cleanup(request):
-    _env_clear()
     request.addfinalizer(utils._cache_clear)
-    request.addfinalizer(_env_clear)
 
 
 @pytest.fixture(autouse=True)
