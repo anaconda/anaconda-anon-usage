@@ -1,10 +1,16 @@
 import base64
 import re
 import uuid
-from os import environ
 from os.path import exists
 
+import pytest
+
 from anaconda_anon_usage import tokens, utils
+
+try:
+    import anaconda_auth
+except ImportError:
+    anaconda_auth = None
 
 
 def test_client_token(aau_token_path):
@@ -150,26 +156,26 @@ def test_token_string_with_two_dotted_org_tokens(two_dotted_org_tokens):
     assert token_string.count(" o/") == 2
 
 
-def test_token_string_with_env_org_token(no_system_tokens):
+def test_token_string_with_env_org_token(monkeypatch, no_system_tokens):
     org_token_e = utils._random_token()
     mch_token_e = utils._random_token()
     ins_token_e = utils._random_token()
-    environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
-    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
-    environ["ANACONDA_ANON_USAGE_INSTALLER_TOKEN"] = ins_token_e
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_ORG_TOKEN", org_token_e)
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_MACHINE_TOKEN", mch_token_e)
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", ins_token_e)
     token_string = tokens.token_string()
     assert "o/" + org_token_e in token_string
     assert "m/" + mch_token_e in token_string
 
 
-def test_token_string_with_system_and_env(system_tokens):
-    org_token, mch_token, ins_token = system_tokens
+def test_token_string_with_system_and_env(monkeypatch, system_tokens):
+    org_token, mch_token = system_tokens
     org_token_e = utils._random_token()
     mch_token_e = utils._random_token()
     ins_token_e = utils._random_token()
-    environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
-    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
-    environ["ANACONDA_ANON_USAGE_INSTALLER_TOKEN"] = ins_token_e
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_ORG_TOKEN", org_token_e)
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_MACHINE_TOKEN", mch_token_e)
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", ins_token_e)
     token_string = tokens.token_string()
     assert "i/" + ins_token in token_string
     assert "i/" + ins_token_e in token_string
@@ -183,13 +189,13 @@ def test_token_string_with_system_and_env(system_tokens):
     assert token_string.count(" i/") == 2
 
 
-def test_token_string_with_invalid_tokens(no_system_tokens):
+def test_token_string_with_invalid_tokens(monkeypatch, no_system_tokens):
     org_token_e = "invalid token"
     mch_token_e = "superlongtokenthathasnobusinessbeinganactualtoken"
     ins_token_e = "fake installer"
-    environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
-    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
-    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = ins_token_e
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_ORG_TOKEN", org_token_e)
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_MACHINE_TOKEN", mch_token_e)
+    monkeypatch.setenv("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", ins_token_e)
     token_string = tokens.token_string()
     assert "o/" not in token_string
     assert "m/" not in token_string
@@ -249,19 +255,11 @@ def test_token_string_env_readonly(monkeypatch, no_system_tokens):
     assert "m/" not in token_string
 
 
-def test_anaconda_string_keyring(anaconda_uid):
+@pytest.mark.skipif(anaconda_auth is None, reason="Requires the anaconda_auth module")
+def test_keyring_in_module(api_key_sub):
     token_string = tokens.token_string()
     assert "a/" in token_string
-    expected = uuid.UUID(anaconda_uid).bytes
-    expected = base64.urlsafe_b64encode(expected).decode("ascii").rstrip("=")
-    aval = re.sub("^.*a/", "", token_string).split(" ", 1)[0]
-    assert aval == expected
-
-
-def test_anaconda_string_env(anaconda_uid_env):
-    token_string = tokens.token_string()
-    assert "a/" in token_string
-    expected = uuid.UUID(anaconda_uid_env).bytes
+    expected = uuid.UUID(api_key_sub).bytes
     expected = base64.urlsafe_b64encode(expected).decode("ascii").rstrip("=")
     aval = re.sub("^.*a/", "", token_string).split(" ", 1)[0]
     assert aval == expected
