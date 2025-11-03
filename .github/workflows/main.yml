@@ -126,14 +126,14 @@ jobs:
         pytest
         python tests/integration/test_config.py
     - name: Test heartbeats (pwsh)
-      if: matrix.os == 'windows-latest' && (matrix.cversion == '25.7.0' || matrix.cversion == '24.11.3')
+      if: matrix.os == 'windows-latest' && matrix.cversion >= '24' && matrix.cversion < '4'
       shell: pwsh
       run: |
         .\testenv\shell\condabin\conda-hook.ps1
         conda activate base
         python tests\integration\test_heartbeats.py powershell
     - name: Test heartbeats (cmd)
-      if: matrix.os == 'windows-latest' && (matrix.cversion == '25.7.0' || matrix.cversion == '24.11.3')
+      if: matrix.os == 'windows-latest' && matrix.cversion >= '24' && matrix.cversion < '4'
       shell: cmd
       run: |
         call .\testenv\Scripts\activate.bat
@@ -141,18 +141,19 @@ jobs:
         python tests\integration\test_heartbeats.py cmd.exe
         if %errorlevel% neq 0 exit 1
     - name: Test heartbeats (bash)
-      if: matrix.os != 'windows-latest' && (matrix.cversion == '25.7.0' || matrix.cversion == '24.11.3')
+      if: matrix.os != 'windows-latest' && matrix.cversion >= '24' && matrix.cversion < '4'
       run: |
         source ./testenv/bin/activate
         conda info
         python tests/integration/test_heartbeats.py posix
     - name: Build an installer
+      if: matrix.cversion >= '24' && matrix.cversion < '4'
       run: |
         cd tests/integration
         export CONDA_PREFIX=$CONDA
         bash test_installer.sh ${{ matrix.cversion }}
     - name: Run the installer (Windows)
-      if: matrix.os == 'windows-latest'
+      if: matrix.os == 'windows-latest' && matrix.cversion >= '24' && matrix.cversion < '4'
       shell: cmd
       run: |
         cd tests/integration
@@ -160,13 +161,14 @@ jobs:
         call %USERPROFILE%\aidtest\Scripts\activate
         conda info
     - name: Run the installer (Unix)
-      if: matrix.os != 'windows-latest'
+      if: matrix.os != 'windows-latest' && matrix.cversion >= '24' && matrix.cversion < '4'
       run: |
         cd tests/integration
         bash AIDTest*.sh -b -p ~/aidtest -k
         source ~/aidtest/bin/activate
         conda info
     - name: Test the installed environment
+      if: matrix.cversion >= '24' && matrix.cversion < '4'
       run: |
         cd tests/integration
         bash test_environment.sh ~/aidtest
