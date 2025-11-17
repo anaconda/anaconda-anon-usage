@@ -24,6 +24,7 @@ Tokens = namedtuple(
         "session",
         "environment",
         "anaconda_cloud",
+        "installer",
         "organization",
         "machine",
     ),
@@ -31,6 +32,7 @@ Tokens = namedtuple(
 CONFIG_DIR = expanduser("~/.conda")
 ANACONDA_DIR = expanduser("~/.anaconda")
 ORG_TOKEN_NAME = "org_token"
+INSTALLER_TOKEN_NAME = "installer_token"
 MACHINE_TOKEN_NAME = "machine_token"
 
 # System tokens may consist of only letters, numbers,
@@ -126,6 +128,14 @@ def _system_tokens(fname, what):
         invalid = ", ".join(t for t in tokens if t not in valid)
         _debug("One or more invalid %s tokens discarded: %s", what, invalid)
     return valid
+
+
+@cached
+def installer_tokens():
+    """
+    Returns the list of organization tokens.
+    """
+    return _system_tokens(INSTALLER_TOKEN_NAME, "installer")
 
 
 @cached
@@ -284,6 +294,7 @@ def all_tokens(prefix=None):
         session_token(),
         environment_token(prefix),
         anaconda_auth_token(),
+        installer_tokens(),
         organization_tokens(),
         machine_tokens(),
     )
@@ -306,6 +317,8 @@ def token_string(prefix=None, enabled=True):
             parts.append("e/" + values.environment)
         if values.anaconda_cloud:
             parts.append("a/" + values.anaconda_cloud)
+        if values.installer:
+            parts.extend("i/" + t for t in values.installer)
         # Organization and machine tokens can potentially be
         # multi-valued, and this is rendered in the user agent
         # string as multiple instances separated by spaces. This

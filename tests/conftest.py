@@ -88,15 +88,18 @@ def _build_tokens(tpath, machine=True):
         mtoken = utils._random_token()
         with open(dirname(tpath) + "/machine_token", "w") as fp:
             fp.write(mtoken + "\n# Anaconda machine token\n")
+        itoken = utils._random_token()
+        with open(dirname(tpath) + "/installer_token", "w") as fp:
+            fp.write(itoken + "\n# Anaconda installer token\n")
     else:
-        mtoken = None
-    return (otoken, mtoken)
+        mtoken = itoken = None
+    return (otoken, mtoken, itoken)
 
 
 @pytest.fixture
 def no_system_tokens(aau_token_path):
     for tpath in _system_token_path(0):
-        yield (None, None)
+        yield (None, None, None)
 
 
 @pytest.fixture
@@ -120,6 +123,8 @@ def _env_clear():
         del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
     if "ANACONDA_ANON_USAGE_MACHINE_TOKEN" in environ:
         del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
+    if "ANACONDA_ANON_USAGE_INSTALLER_TOKEN" in environ:
+        del environ["ANACONDA_ANON_USAGE_INSTALLER_TOKEN"]
 
 
 @pytest.fixture(autouse=True)

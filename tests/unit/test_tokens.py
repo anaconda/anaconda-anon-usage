@@ -104,6 +104,7 @@ def test_token_string(no_system_tokens):
     assert "s/" in token_string
     assert "e/" in token_string
     assert "a/" not in token_string
+    assert "i/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
@@ -115,21 +116,24 @@ def test_token_string_disabled(no_system_tokens):
     assert "s/" not in token_string
     assert "e/" not in token_string
     assert "a/" not in token_string
+    assert "i/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
 
 def test_token_string_with_system(system_tokens):
-    org_token, mch_token = system_tokens
+    org_token, mch_token, ins_token = system_tokens
     token_string = tokens.token_string()
+    assert "i/" + ins_token in token_string
     assert "o/" + org_token in token_string
     assert "m/" + mch_token in token_string
     assert token_string.count(" o/") == 1
 
 
 def test_token_string_with_two_org_tokens(two_org_tokens):
-    org_token, mch_token, org_token2 = two_org_tokens
+    org_token, mch_token, ins_token, org_token2 = two_org_tokens
     token_string = tokens.token_string()
+    assert "i/" + ins_token in token_string
     assert "o/" + org_token in token_string
     assert "m/" + mch_token in token_string
     assert "o/" + org_token2 in token_string
@@ -139,36 +143,47 @@ def test_token_string_with_two_org_tokens(two_org_tokens):
 def test_token_string_with_env_org_token(no_system_tokens):
     org_token_e = utils._random_token()
     mch_token_e = utils._random_token()
+    ins_token_e = utils._random_token()
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
     environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
+    environ["ANACONDA_ANON_USAGE_INSTALLER_TOKEN"] = ins_token_e
     token_string = tokens.token_string()
     assert "o/" + org_token_e in token_string
     assert "m/" + mch_token_e in token_string
 
 
 def test_token_string_with_system_and_env(system_tokens):
-    org_token, mch_token = system_tokens
+    org_token, mch_token, ins_token = system_tokens
     org_token_e = utils._random_token()
     mch_token_e = utils._random_token()
+    ins_token_e = utils._random_token()
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
     environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
+    environ["ANACONDA_ANON_USAGE_INSTALLER_TOKEN"] = ins_token_e
     token_string = tokens.token_string()
+    assert "i/" + ins_token in token_string
+    assert "i/" + ins_token_e in token_string
+    assert "i/" + ins_token_e in token_string
     assert "o/" + org_token in token_string
     assert "o/" + org_token_e in token_string
     assert "m/" + mch_token in token_string
     assert "m/" + mch_token_e in token_string
     assert token_string.count(" o/") == 2
     assert token_string.count(" m/") == 2
+    assert token_string.count(" i/") == 2
 
 
 def test_token_string_with_invalid_tokens(no_system_tokens):
     org_token_e = "invalid token"
     mch_token_e = "superlongtokenthathasnobusinessbeinganactualtoken"
+    ins_token_e = "fake installer"
     environ["ANACONDA_ANON_USAGE_ORG_TOKEN"] = org_token_e
     environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = mch_token_e
+    environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"] = ins_token_e
     token_string = tokens.token_string()
     assert "o/" not in token_string
     assert "m/" not in token_string
+    assert "i/" not in token_string
 
 
 def test_token_string_no_client_token(monkeypatch, no_system_tokens):
@@ -182,6 +197,7 @@ def test_token_string_no_client_token(monkeypatch, no_system_tokens):
     assert "c/" not in token_string
     assert "s/" in token_string
     assert "e/env_token" in token_string
+    assert "i/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
@@ -193,6 +209,7 @@ def test_token_string_no_environment_token(monkeypatch, no_system_tokens):
     assert "c/" in token_string
     assert "s/" in token_string
     assert "e/" not in token_string
+    assert "i/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
@@ -204,6 +221,7 @@ def test_token_string_full_readonly(monkeypatch, no_system_tokens):
     assert "c/" not in token_string
     assert "s/" in token_string
     assert "e/" not in token_string
+    assert "i/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
@@ -216,6 +234,7 @@ def test_token_string_env_readonly(monkeypatch, no_system_tokens):
     assert "c/" in token_string
     assert "s/" in token_string
     assert "e/" not in token_string
+    assert "i/" not in token_string
     assert "o/" not in token_string
     assert "m/" not in token_string
 
