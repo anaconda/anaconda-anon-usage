@@ -113,10 +113,11 @@ def _system_tokens(fname, what):
         _debug("Found %s token in environment: %s", what, t_token)
         tokens.append(t_token)
     for path in _search_path():
-        fpath = join(path, fname)
-        if isfile(fpath):
-            t_token = _read_file(fpath, what + " token", single_line=True)
-            tokens.append(t_token)
+        for pfx in ("", "."):
+            fpath = join(path, pfx + fname)
+            if isfile(fpath):
+                t_token = _read_file(fpath, what + " token", single_line=True)
+                tokens.append(t_token)
     # Deduplicate while preserving order
     tokens = list(dict.fromkeys(t for t in tokens if t))
     if not tokens:
@@ -317,12 +318,12 @@ def token_string(prefix=None, enabled=True):
             parts.append("e/" + values.environment)
         if values.anaconda_cloud:
             parts.append("a/" + values.anaconda_cloud)
+        # System tokens can potentially be multi-valued, and this
+        # is rendered in the user agent string as multiple instances
+        # separated by spaces. This was chosen to facilitate easier
+        # filtering & search
         if values.installer:
             parts.extend("i/" + t for t in values.installer)
-        # Organization and machine tokens can potentially be
-        # multi-valued, and this is rendered in the user agent
-        # string as multiple instances separated by spaces. This
-        # was chosen to facilitate easier filtering & search
         if values.organization:
             parts.extend("o/" + t for t in values.organization)
         if values.machine:

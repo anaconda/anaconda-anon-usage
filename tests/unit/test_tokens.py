@@ -140,6 +140,16 @@ def test_token_string_with_two_org_tokens(two_org_tokens):
     assert token_string.count(" o/") == 2
 
 
+def test_token_string_with_two_dotted_org_tokens(two_dotted_org_tokens):
+    org_token, mch_token, ins_token, org_token2 = two_dotted_org_tokens
+    token_string = tokens.token_string()
+    assert "i/" + ins_token in token_string
+    assert "o/" + org_token in token_string
+    assert "m/" + mch_token in token_string
+    assert "o/" + org_token2 in token_string
+    assert token_string.count(" o/") == 2
+
+
 def test_token_string_with_env_org_token(no_system_tokens):
     org_token_e = utils._random_token()
     mch_token_e = utils._random_token()
