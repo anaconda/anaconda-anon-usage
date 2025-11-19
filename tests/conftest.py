@@ -80,29 +80,34 @@ def _system_token_path(npaths=1):
         utils._cache_clear("_search_path", "organization_tokens", "machine_tokens")
 
 
-def _build_tokens(tpath, machine=True):
+def _build_tokens(tpath, machine=True, dotted=False):
+    pfx = "." if dotted else ""
     otoken = utils._random_token()
-    with open(dirname(tpath) + "/org_token", "w") as fp:
+    tdir = dirname(tpath)
+    with open(join(tdir, pfx + "org_token"), "w") as fp:
         fp.write(otoken + "\n# Anaconda organization token\n")
     if machine:
         mtoken = utils._random_token()
-        with open(dirname(tpath) + "/machine_token", "w") as fp:
+        with open(join(tdir, pfx + "machine_token"), "w") as fp:
             fp.write(mtoken + "\n# Anaconda machine token\n")
+        itoken = utils._random_token()
+        with open(join(tdir, pfx + "installer_token"), "w") as fp:
+            fp.write(itoken + "\n# Anaconda installer token\n")
     else:
-        mtoken = None
-    return (otoken, mtoken)
+        mtoken = itoken = None
+    return (otoken, mtoken, itoken)
 
 
 @pytest.fixture
 def no_system_tokens(aau_token_path):
     for tpath in _system_token_path(0):
-        yield (None, None)
+        yield (None, None, None)
 
 
 @pytest.fixture
 def system_tokens(aau_token_path):
     for tpaths in _system_token_path(1):
-        yield _build_tokens(tpaths[1])
+        yield _build_tokens(tpaths[1], machine=True)
 
 
 @pytest.fixture
@@ -113,6 +118,14 @@ def two_org_tokens(aau_token_path):
         yield t1 + t2[:1]
 
 
+@pytest.fixture
+def two_dotted_org_tokens(aau_token_path):
+    for tpaths in _system_token_path(2):
+        t1 = _build_tokens(tpaths[1], True, dotted=True)
+        t2 = _build_tokens(tpaths[4], False, dotted=True)
+        yield t1 + t2[:1]
+
+
 def _env_clear():
     if "ANACONDA_AUTH_API_KEY" in environ:
         del environ["ANACONDA_AUTH_API_KEY"]
@@ -120,6 +133,8 @@ def _env_clear():
         del environ["ANACONDA_ANON_USAGE_ORG_TOKEN"]
     if "ANACONDA_ANON_USAGE_MACHINE_TOKEN" in environ:
         del environ["ANACONDA_ANON_USAGE_MACHINE_TOKEN"]
+    if "ANACONDA_ANON_USAGE_INSTALLER_TOKEN" in environ:
+        del environ["ANACONDA_ANON_USAGE_INSTALLER_TOKEN"]
 
 
 @pytest.fixture(autouse=True)
