@@ -134,7 +134,7 @@ def _system_tokens(fname, what):
 @cached
 def installer_tokens():
     """
-    Returns the list of organization tokens.
+    Returns the list of installer tokens.
     """
     return _system_tokens(INSTALLER_TOKEN_NAME, "installer")
 
