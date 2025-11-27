@@ -247,27 +247,21 @@ def anaconda_auth_token():
         str: Base64-encoded token, or None if no valid token found.
     """
     try:
-        from anaconda_auth.config import AnacondaAuthSitesConfig
         from anaconda_auth.token import TokenInfo, TokenNotFoundError
 
         _debug("Module anaconda_auth loaded")
+        tinfo = TokenInfo.load(domain="anaconda.com")
+        if tinfo.api_key:
+            token = _jwt_to_token(tinfo.api_key)
+            _debug("Retrieved Anaconda auth token: %s", token)
+            return token
     except ImportError:
-        _debug("Module anaconda_auth not loaded")
-        return
-    try:
-        config = AnacondaAuthSitesConfig.load_site()
-        if config.api_key:
-            _debug("Configured anaconda_auth api key found")
-            return _jwt_to_token(config.api_key)
-        try:
-            tinfo = TokenInfo.load(domain=config.domain)
-            if tinfo.api_key:
-                _debug("API key found for domain: %s", config.domain)
-                return _jwt_to_token(tinfo.api_key)
-        except TokenNotFoundError:
-            _debug("No API key found for domain: %s", config.domain)
+        _debug("Module anaconda_auth not available")
+    except TokenNotFoundError:
+        pass
     except Exception as exc:
         _debug("Unexpected error retrieving token using anaconda_auth: %s", exc)
+    _debug("No Anaconda API token found")
 
 
 @cached

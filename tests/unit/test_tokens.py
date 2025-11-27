@@ -169,7 +169,7 @@ def test_token_string_with_env_org_token(monkeypatch, no_system_tokens):
 
 
 def test_token_string_with_system_and_env(monkeypatch, system_tokens):
-    org_token, mch_token = system_tokens
+    org_token, mch_token, ins_token = system_tokens
     org_token_e = utils._random_token()
     mch_token_e = utils._random_token()
     ins_token_e = utils._random_token()
