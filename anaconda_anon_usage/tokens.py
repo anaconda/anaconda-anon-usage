@@ -5,6 +5,7 @@
 # child environments.
 
 import base64
+import datetime as dt
 import json
 import re
 import sys
@@ -208,7 +209,7 @@ def _jwt_to_token(s):
       exp: the expiration time
     """
     if not s:
-        return None, 0
+        return
     try:
         # The JWT should have three parts separated by periods
         parts = s.split(".")
@@ -223,64 +224,44 @@ def _jwt_to_token(s):
         # The payload should have a positive integer expiration
         exp = parts[1].get("exp")
         assert isinstance(exp, int) and exp > 0, "Invalid expiration"
+        now = dt.datetime.now(tz=dt.timezone.utc).timestamp()
+        if exp < now:
+            _debug("API key expired %ds ago", int(now - exp))
+            return
         # The subscriber should be a non-empty UUID string
         sub = parts[1].get("sub")
         assert sub, "Invalid subscriber"
         # This is an Anaconda requirement, not a JWT requirement
         sub = uuid.UUID(sub).bytes
         token = base64.urlsafe_b64encode(sub).decode("ascii").strip("=")
-        return token, exp
+        return token
     except Exception as exc:
         _debug("Unexpected %s parsing API key: %s", type(exc), exc)
-        return None, 0
 
 
 @cached
 def anaconda_auth_token():
-    """Retrieve Anaconda Cloud token from keyring.
-
-    Examines all entries under 'Anaconda Cloud' in the keyring and
-    selects the token with the latest expiration date. This handles
-    migration from 'anaconda.cloud' to 'anaconda.com' entries.
-
+    """Returns the base64-encoded uid corresponding to the logged
+    in Anaconda Cloud user, if one is present.
     Returns:
         str: Base64-encoded token, or None if no valid token found.
     """
-    env = environ.get("ANACONDA_AUTH_API_KEY")
-    if env:
-        _debug("ANACONDA_AUTH_API_KEY environment variable found")
-        token, _ = _jwt_to_token(env)
-        if token:
-            _debug("Retrieved Anaconda token from environment: %s", token)
-            return token
-        _debug("Could not retrieve API key from environment")
-    fpath = expanduser(join(ANACONDA_DIR, "keyring"))
-    data = _read_file(fpath, "anaconda keyring")
-    if not data:
-        return
     try:
-        data = json.loads(data)
+        from anaconda_auth.token import TokenInfo, TokenNotFoundError
+
+        _debug("Module anaconda_auth loaded")
+        tinfo = TokenInfo.load(domain="anaconda.com")
+        if tinfo.api_key:
+            token = _jwt_to_token(tinfo.api_key)
+            _debug("Retrieved Anaconda auth token: %s", token)
+            return token
+    except ImportError:
+        _debug("Module anaconda_auth not available")
+    except TokenNotFoundError:
+        pass
     except Exception as exc:
-        _debug("Unexpected JSON decoding error parsing keyring file: %s", exc)
-        return
-    if not data or not isinstance(data, dict):
-        _debug("Empty keyring")
-        return
-    token, exp = None, 0
-    for key, rec in (data.get("Anaconda Cloud") or {}).items():
-        try:
-            tdata = json.loads(base64.b64decode(rec))["api_key"]
-        except Exception as exc:
-            _debug("Unexpected error parsing keyring entry '%s': %s", key, exc)
-        t_token, t_exp = _jwt_to_token(tdata)
-        if t_exp > exp:
-            token = t_token
-            exp = t_exp
-    if token:
-        _debug("Retrieved Anaconda token from keyring: %s", token)
-    else:
-        _debug("No Anaconda keyring records found")
-    return token
+        _debug("Unexpected error retrieving token using anaconda_auth: %s", exc)
+    _debug("No Anaconda API token found")
 
 
 @cached
