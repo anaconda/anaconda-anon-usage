@@ -8,8 +8,8 @@ servers during index and package requests. Specifically,
 a set of tokens are appended to the "user agent" that
 Conda already sends with each request.
 
-Most tokens are designed to reveal _no_
-personally identifying information. And yet, they enable
+These tokens are anonymous by design. An Anaconda Cloud
+token is included only if the user chooses to log in. They enable
 Anaconda to better disaggregate individual user patterns
 from our access logs. Use cases include:
 
