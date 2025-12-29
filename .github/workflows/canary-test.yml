@@ -18,51 +18,16 @@ jobs:
     outputs:
       conda-spec: ${{ steps.discover.outputs.conda-spec }}
       python-versions: ${{ steps.discover.outputs.python-versions }}
-      aau-spec: ${{ steps.discover.outputs.aau-spec }}
+      anaconda-anon-usage-spec: ${{ steps.discover.outputs.anaconda-anon-usage-spec }}
     steps:
+    - name: Retrieve the source code
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
     - name: Discover latest canary build
       id: discover
-      shell: '/usr/share/miniconda/bin/python {0}'
-      run: |
-        # Search for conda packages in canary channel
-        import json, sys, io, os, re
-        from conda.cli.main import main
-        from conda.models.version import normalized_version
-
-        _stdout, sys.stdout = sys.stdout, io.StringIO()
-        main('search', '-c', 'conda-canary', '-c', 'conda-canary/label/dev', '--override-channels', 'conda', '--json')
-        c_data, sys.stdout = sys.stdout.getvalue(), io.StringIO()
-        main('search', '-c', 'ctools', '-c', 'ctools/label/dev', '--override-channels', 'anaconda-anon-usage', '--json')
-        a_data, sys.stdout = sys.stdout.getvalue(), _stdout
-
-        c_data = json.loads(c_data)['conda']
-        if not c_data:
-          sys.exit(0)
-
-        max_version = sorted((d['version'] for d in c_data), key=normalized_version)[-1]
-        channel = [d['channel'] for d in c_data if d['version'] == max_version]
-        channel = '/'.join(channel[0].split('/')[3:-1])
-        cspec = f'conda-spec={channel}::conda={max_version}'
-
-        builds = [b['build'] for b in c_data if b['version'] == max_version]
-        py_versions = set(re.sub(r'py3(\d+).*', r'3.\1', b) for b in builds)
-        py_versions = json.dumps(sorted(py_versions, key=normalized_version))
-        pspec = f'python-versions={py_versions}'
-
-        a_data = json.loads(a_data)['anaconda-anon-usage']
-        max_version = sorted((d['version'] for d in a_data), key=normalized_version)[-1]
-        channel = [d['channel'] for d in a_data if d['version'] == max_version]
-        channel = '/'.join(channel[0].split('/')[3:-1])
-        aspec = f'aau-spec={channel}::anaconda-anon-usage={max_version}'
-
-        specs = f"{cspec}\n{pspec}\n{aspec}\n"
-        print(specs)
-        with open(os.getenv("GITHUB_OUTPUT"), "a") as fp:
-            fp.write(specs)
-
+      run: $CONDA/bin/python tests/canary_versions.py >>$GITHUB_OUTPUT
   test:
     needs: discover-canary
-    if: needs.discover-canary.outputs.aau-spec != '' && needs.discover-canary.outputs.conda-spec != ''
+    if: needs.discover-canary.outputs.conda-spec != ''
     env:
       ANACONDA_ANON_USAGE_DEBUG: 1
       ANACONDA_ANON_USAGE_RAISE: 1
@@ -91,7 +56,7 @@ jobs:
     - name: Build test environment
       run: |
         cspec=${{ needs.discover-canary.outputs.conda-spec }}
-        aspec=${{ needs.discover-canary.outputs.aau-spec }}
+        aspec=${{ needs.discover-canary.outputs.anaconda-anon-usage-spec }}
         pspec="python=${{ matrix.python-version }}"
         echo "-----------------------------"
         echo "CREATING BASE: $cspec $aspec $pspec"
@@ -149,14 +114,14 @@ jobs:
       run: |
         echo "=== Debug: Job Outputs ==="
         echo "CONDA_SPEC: '${{ needs.discover-canary.outputs.conda-spec }}'"
-        echo "AAU_SPEC: '${{ needs.discover-canary.outputs.aau-spec }}'"
+        echo "AAU_SPEC: '${{ needs.discover-canary.outputs.anaconda-anon-usages-spec }}'"
         echo "PYTHON_VERSIONS: '${{ needs.discover-canary.outputs.python-versions }}'"
         echo "TEST_RESULT: '${{ needs.test.result }}'"
         echo "DISCOVER_RESULT: '${{ needs.discover-canary.result }}'"
         echo "=========================="
 
         CONDA_SPEC="${{ needs.discover-canary.outputs.conda-spec }}"
-        AAU_SPEC="${{ needs.discover-canary.outputs.aau-spec }}"
+        AAU_SPEC="${{ needs.discover-canary.outputs.anaconda-anon-usage-spec }}"
         PYTHON_VERSIONS="${{ needs.discover-canary.outputs.python-versions }}"
         TEST_RESULT="${{ needs.test.result }}"
 
@@ -164,14 +129,8 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
 
         # Check if builds were found
-        if [ -z "$CONDA_SPEC" ] || [ -z "$AAU_SPEC" ]; then
+        if [ -z "$CONDA_SPEC" ]; then
           echo "ℹ️ No canary builds available - tests skipped" >> $GITHUB_STEP_SUMMARY
-          if [ -z "$CONDA_SPEC" ]; then
-            echo "- No conda canary builds found in conda-canary channels" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ -z "$AAU_SPEC" ]; then
-            echo "- No anaconda-anon-usage builds found in ctools channels" >> $GITHUB_STEP_SUMMARY
-          fi
           exit 0
         fi
 
