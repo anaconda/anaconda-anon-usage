@@ -16,6 +16,7 @@ except ImportError:
 def test_client_token(aau_token_path):
     assert not exists(aau_token_path)
     assert tokens.client_token() != ""
+    utils._final_attempt()
     assert exists(aau_token_path)
 
 
@@ -25,6 +26,7 @@ def test_client_token_no_nodeid(aau_token_path, mocker):
     node_path = aau_token_path + "_host"
     assert not exists(aau_token_path) and not exists(node_path)
     token1 = tokens.client_token()
+    utils._final_attempt()
     assert token1 != "" and exists(aau_token_path)
     with open(aau_token_path) as fp:
         token2 = fp.read()
@@ -42,6 +44,7 @@ def test_client_token_add_hostid(aau_token_path):
         fp.write(token1)
     token2 = tokens.client_token()
     assert token1 == token2
+    utils._final_attempt()
     with open(aau_token_path) as fp:
         token3 = fp.read()
     with open(node_path) as fp:
@@ -63,6 +66,7 @@ def test_client_token_replace_hostid(aau_token_path):
         fp.write("xxxxxxxx")
     token2 = tokens.client_token()
     assert token1 != token2
+    utils._final_attempt()
     with open(aau_token_path) as fp:
         token3 = fp.read()
     with open(node_path) as fp:
@@ -82,6 +86,7 @@ def test_client_token_migrate_hostid(aau_token_path):
         fp.write(token1 + " " + utils._get_node_str())
     token2 = tokens.client_token()
     assert token1 == token2
+    utils._final_attempt()
     with open(aau_token_path) as fp:
         token3 = fp.read()
     with open(node_path) as fp:

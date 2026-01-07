@@ -101,8 +101,10 @@ def _final_attempt():
     environment directory was not yet available.
     """
     global DEFERRED
-    for fpath, (must_exist, token, what) in DEFERRED.items():
-        _write_attempt(must_exist, fpath, token)
+    for fpath, (must_exist, token, what, chaos) in list(DEFERRED.items()):
+        _debug("Attempting write to: %s", fpath)
+        if _write_attempt(must_exist, fpath, token) == WRITE_SUCCESS:
+            del DEFERRED[fpath]
 
 
 atexit.register(_final_attempt)
@@ -240,7 +242,7 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
         # anonymous under this approach, and the host ID is not sent.
         current_node = _get_node_str()
         npath = fpath + "_host"
-        saved_node = _read_file(npath, "Host id", single_line=True) or ""
+        saved_node = _read_file(npath, "Host ID", single_line=True) or ""
         true_node = saved_node or (xtra[0] if xtra else None)
         if regenerate or not true_node:
             pass
@@ -260,20 +262,13 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
             )
             current_node = current_node or ""
             _debug("%s host ID: %s", action, current_node)
-            if _write_attempt(False, npath, current_node, False) == WRITE_DEFER:
-                DEFERRED[npath] = (False, current_node, "Host ID")
+            _debug("Deferring write to: %s", npath)
+            DEFERRED[npath] = (False, current_node, "Host ID")
     if regenerate or resave:
         if read_only:
             return ""
         if regenerate:
             client_token = _random_token()
-        status = _write_attempt(must_exist, fpath, client_token, what[0] in WRITE_CHAOS)
-        if status == WRITE_FAIL:
-            _debug("Returning blank %s", what)
-            return ""
-        elif status == WRITE_DEFER:
-            # If the environment has not yet been created we need
-            # to defer the token write until later.
-            _debug("Deferring %s write", what)
-            DEFERRED[fpath] = (must_exist, client_token, what)
+        _debug("Deferring write to: %s", fpath)
+        DEFERRED[fpath] = (must_exist, client_token, what)
     return client_token
