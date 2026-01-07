@@ -6,7 +6,7 @@ import sys
 import uuid
 from os.path import dirname, isdir, isfile
 from threading import RLock
-from typing import List, Optional
+from typing import Dict, Optional
 
 DPREFIX = os.environ.get("ANACONDA_ANON_USAGE_DEBUG_PREFIX") or ""
 DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG")) or DPREFIX
@@ -17,7 +17,7 @@ DEBUG = bool(os.environ.get("ANACONDA_ANON_USAGE_DEBUG")) or DPREFIX
 # then the creation is interrupted, the directory will now be in
 # a state where conda is unwilling to install into it, thinking
 # it is a non-empty non-conda directory.
-DEFERRED = []
+DEFERRED = {}
 
 # While lru_cache is thread safe, it does not prevent two threads
 # from beginning the same computation. This simple cache mechanism
@@ -101,7 +101,7 @@ def _final_attempt():
     environment directory was not yet available.
     """
     global DEFERRED
-    for must_exist, fpath, token, what in DEFERRED:
+    for fpath, (must_exist, token, what) in DEFERRED.items():
         _write_attempt(must_exist, fpath, token)
 
 
@@ -142,7 +142,7 @@ def _write_attempt(must_exist, fpath, client_token, emulate_fail=False):
 
 
 def _deferred_exists(
-    fpath: str, what: str, deferred_writes: List = DEFERRED
+    fpath: str, what: str, deferred_writes: Dict = DEFERRED
 ) -> Optional[str]:
     """
     Check if the deferred token write exists in the DEFERRED write array.
@@ -157,9 +157,10 @@ def _deferred_exists(
     Returns:
         The token if it exists, otherwise None.
     """
-    for _, fp, token, w in deferred_writes:
-        if fp == fpath and w == what:
-            return token
+    record = deferred_writes.get(fpath)
+    # must_exist, token, what == record
+    if record and record[2] == what:
+        return record[1]
 
 
 def _read_file(fpath, what, read_only=False, single_line=False):
@@ -260,7 +261,7 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
             current_node = current_node or ""
             _debug("%s host ID: %s", action, current_node)
             if _write_attempt(False, npath, current_node, False) == WRITE_DEFER:
-                DEFERRED.append((False, npath, current_node, "Host ID"))
+                DEFERRED[npath] = (False, current_node, "Host ID")
     if regenerate or resave:
         if read_only:
             return ""
@@ -274,5 +275,5 @@ def _saved_token(fpath, what, must_exist=None, read_only=False, node_tie=False):
             # If the environment has not yet been created we need
             # to defer the token write until later.
             _debug("Deferring %s write", what)
-            DEFERRED.append((must_exist, fpath, client_token, what))
+            DEFERRED[fpath] = (must_exist, client_token, what)
     return client_token
