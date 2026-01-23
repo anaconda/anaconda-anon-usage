@@ -17,7 +17,7 @@ class AlwaysContains:
 
 @plugins.hookimpl
 def conda_pre_commands():
-    yield plugins.CondaPreCommand(
+    yield plugins.types.CondaPreCommand(
         name="anaconda-anon-usage",
         action=pre_command_patcher,
         # This ensures the plugin is run no matter what
