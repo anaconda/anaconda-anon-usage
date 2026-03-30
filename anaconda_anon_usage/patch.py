@@ -78,7 +78,9 @@ def _patch_check_prefix():
     # context.target_prefix, which is set during arg parsing—before any
     # HTTP request needs the user-agent string.
     if not hasattr(cli_install, "check_prefix"):
-        _debug("conda.cli.install.check_prefix not found (conda>=25.5), skipping patch")
+        _debug(
+            "conda.cli.install.check_prefix not found (removed in conda 26.x), skipping patch"
+        )
         context._aau_initialized = True
         return
 
