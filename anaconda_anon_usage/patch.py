@@ -69,10 +69,22 @@ def _new_activate(self):
 def _patch_check_prefix():
     if hasattr(Context, "_old_check_prefix"):
         return
-    _debug("Applying anaconda_anon_usage cli.install patch")
 
     from conda.cli import install as cli_install
 
+    # conda >= 25.5.0 deprecated check_prefix (moving its logic into
+    # PrefixData) and conda >= 26.3.0 removed it entirely.  When it is
+    # absent we skip the patch; _new_user_agent already falls back to
+    # context.target_prefix, which is set during arg parsing—before any
+    # HTTP request needs the user-agent string.
+    if not hasattr(cli_install, "check_prefix"):
+        _debug(
+            "conda.cli.install.check_prefix not found (removed in conda 26.x), skipping patch"
+        )
+        context._aau_initialized = True
+        return
+
+    _debug("Applying anaconda_anon_usage cli.install patch")
     Context._old_check_prefix = cli_install.check_prefix
     cli_install.check_prefix = _new_check_prefix
     context._aau_initialized = True

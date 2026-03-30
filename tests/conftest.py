@@ -150,7 +150,8 @@ def reset_patch(request):
         )
         orig_check_prefix = getattr(Context, "_old_check_prefix", None)
         if orig_check_prefix is not None:
-            cli_install.check_prefix = orig_check_prefix
+            if hasattr(cli_install, "check_prefix"):
+                cli_install.check_prefix = orig_check_prefix
             delattr(Context, "_old_check_prefix")
         orig_user_agent = getattr(Context, "_old_user_agent", None)
         if orig_user_agent is not None:

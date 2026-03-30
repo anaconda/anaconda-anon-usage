@@ -59,6 +59,19 @@ def test_main_already_patched():
     assert not response
 
 
+def test_patch_check_prefix_missing(monkeypatch):
+    """When conda.cli.install.check_prefix doesn't exist, patching
+    should skip gracefully and still mark initialization as complete."""
+    from conda.cli import install as cli_install
+
+    monkeypatch.delattr(cli_install, "check_prefix", raising=False)
+    patch.main(plugin=True, command="info")
+    assert context._aau_initialized is True
+    assert not hasattr(context, "_old_check_prefix")
+    # user_agent should still work, falling back to target_prefix
+    assert context.user_agent is not None
+
+
 def test_main_info():
     patch.main(plugin=True)
     tokens = dict(t.split("/", 1) for t in context.user_agent.split(" "))
