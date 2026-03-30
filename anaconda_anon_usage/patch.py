@@ -69,10 +69,15 @@ def _new_activate(self):
 def _patch_check_prefix():
     if hasattr(Context, "_old_check_prefix"):
         return
-    _debug("Applying anaconda_anon_usage cli.install patch")
 
     from conda.cli import install as cli_install
 
+    if not hasattr(cli_install, "check_prefix"):
+        _debug("conda.cli.install.check_prefix not found, skipping patch")
+        context._aau_initialized = True
+        return
+
+    _debug("Applying anaconda_anon_usage cli.install patch")
     Context._old_check_prefix = cli_install.check_prefix
     cli_install.check_prefix = _new_check_prefix
     context._aau_initialized = True
