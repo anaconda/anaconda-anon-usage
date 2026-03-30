@@ -64,6 +64,8 @@ jobs:
         exclude:
           - os: macos-15-intel
             cversion: '25.9.1'
+          - os: macos-15-intel
+            cversion: '26.1.1'
         include:
           - os: macos-15-intel
             cversion: '25.7.0'
