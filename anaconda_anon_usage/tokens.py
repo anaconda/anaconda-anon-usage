@@ -12,7 +12,7 @@ import sys
 import uuid
 from collections import namedtuple
 from os import environ
-from os.path import expanduser, isdir, isfile, join
+from os.path import basename, dirname, expanduser, isfile, join
 
 from . import __version__
 from .utils import _debug, _random_token, _read_file, _saved_token, cached
@@ -50,56 +50,80 @@ def version_token():
     return __version__
 
 
+def _conda_root():
+    """Resolve the conda root/base environment prefix.
+
+    Tries these sources in order, returning the first that succeeds:
+    1. $CONDA_ROOT — set by activation scripts or sys.prefix
+    2. $CONDA_EXE — grandparent of the conda executable path
+    3. $CONDA_PYTHON_EXE — platform-dependent extraction
+       - Unix: .../bin/python -> grandparent
+       - Windows: .../python.exe -> parent
+    4. Walk $PATH for a condabin entry -> its parent directory
+    """
+    # 1. CONDA_ROOT — direct
+    conda_root = environ.get("CONDA_ROOT", "")
+    if conda_root:
+        return conda_root
+
+    # 2. CONDA_EXE — grandparent (strip filename + bin/Scripts)
+    conda_exe = environ.get("CONDA_EXE", "")
+    if conda_exe:
+        return dirname(dirname(conda_exe))
+
+    # 3. CONDA_PYTHON_EXE — platform-dependent
+    conda_python_exe = environ.get("CONDA_PYTHON_EXE", "")
+    if conda_python_exe:
+        if sys.platform == "win32":
+            # Windows: .../python.exe -> parent
+            return dirname(conda_python_exe)
+        else:
+            # Unix: .../bin/python -> grandparent
+            return dirname(dirname(conda_python_exe))
+
+    # 4. Walk PATH for a condabin directory
+    path_var = environ.get("PATH", "")
+    sep = ";" if sys.platform == "win32" else ":"
+    for entry in path_var.split(sep):
+        if entry and basename(entry) == "condabin":
+            return dirname(entry)
+
+    return None
+
+
 @cached
 def _search_path():
     """
     Returns the search path for system tokens.
+
+    Deterministic path construction — does not import conda.
+    Identical logic in the Rust anaconda-anon-usage crate.
     """
-    try:
-        # Do not import SEARCH_PATH directly since we need to
-        # temporarily patch it for testing
-        from conda.base import constants as c_constants
+    if sys.platform == "win32":
+        dirs = ["C:/ProgramData/conda"]
+    else:
+        dirs = ["/etc/conda", "/var/lib/conda"]
 
-        search_path = c_constants.SEARCH_PATH
-    except ImportError:
-        # Because this module was designed to be used even in
-        # environments that do not include conda, we need a
-        # fallback in case conda.base.constants.SEARCH_PATH
-        # is not available. This is a pruned version of the
-        # constructed value of this path as of 2024-12-13.
-        _debug("conda not installed in this environment")
-        if sys.platform == "win32":
-            search_path = ("C:/ProgramData/conda/.condarc",)
-        else:
-            search_path = ("/etc/conda/.condarc", "/var/lib/conda/.condarc")
-        search_path += (
-            "$XDG_CONFIG_HOME/conda/.condarc",
-            "~/.config/conda/.condarc",
-            "~/.conda/.condarc",
-            "~/.condarc",
-            "$CONDARC",
-        )
-    result = []
+    conda_root = _conda_root()
+    if conda_root:
+        dirs.append(conda_root)
+
+    xdg = environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        dirs.append(xdg + "/conda")
+
     home = expanduser("~")
-    for path in search_path:
-        # Only consider directories where
-        # .condarc could also be found
-        if not path.endswith("/.condarc"):
-            continue
-        parts = path.split("/")[:-1]
-        if parts[0] == "~":
-            parts[0] = home
-        elif parts[0].startswith("$"):
-            parts[0] = environ.get(parts[0][1:])
-            if not parts[0]:
-                continue
-        path = "/".join(parts)
-        if isdir(path) and path != home:
-            result.append(path)
-    return result
+    dirs.append(home + "/.config/conda")
+    dirs.append(home + "/.conda")
+
+    conda_prefix = environ.get("CONDA_PREFIX")
+    if conda_prefix and conda_prefix != conda_root:
+        dirs.append(conda_prefix)
+
+    return dirs
 
 
-def _system_tokens(fname, what):
+def _system_tokens(fname, what, with_source=False):
     """
     Returns an organization or machine token installed somewhere
     in the conda path. Unlike most tokens, these will typically
@@ -112,24 +136,27 @@ def _system_tokens(fname, what):
     t_token = environ.get(env_name)
     if t_token:
         _debug("Found %s token in environment: %s", what, t_token)
-        tokens.append(t_token)
+        tokens.append((t_token, "$" + env_name))
     for path in _search_path():
         for pfx in ("", "."):
             fpath = join(path, pfx + fname)
             if isfile(fpath):
                 t_token = _read_file(fpath, what + " token", single_line=True)
-                tokens.append(t_token)
-    # Deduplicate while preserving order
-    tokens = list(dict.fromkeys(t for t in tokens if t))
+                tokens.append((t_token, fpath))
+    # Deduplicate by token value while preserving order
+    seen = set()
+    tokens = [(t, s) for t, s in tokens if t and t not in seen and not seen.add(t)]
     if not tokens:
         _debug("No %s tokens found", what)
-    # Make sure the tokens we omit have only valid characters, so any
+    # Make sure the tokens we emit have only valid characters, so any
     # server-side token parsing is not frustrated.
-    valid = [t for t in tokens if re.match(VALID_TOKEN_RE, t)]
+    valid = [(t, s) for t, s in tokens if re.match(VALID_TOKEN_RE, t)]
     if len(valid) < len(tokens):
-        invalid = ", ".join(t for t in tokens if t not in valid)
+        invalid = ", ".join(t for t, _ in tokens if not re.match(VALID_TOKEN_RE, t))
         _debug("One or more invalid %s tokens discarded: %s", what, invalid)
-    return valid
+    if with_source:
+        return valid
+    return [t for t, _ in valid]
 
 
 @cached
@@ -316,8 +343,104 @@ def token_string(prefix=None, enabled=True):
     return result
 
 
+def _cli():
+    """CLI for testing anaconda-anon-usage token generation."""
+    import os
+
+    args = sys.argv[1:]
+
+    # Parse all options
+    verbosity = 0
+    prefix = None
+    detail = False
+    no_keyring = False
+    jwt = None
+
+    while args:
+        if args[0] == "--verbose":
+            verbosity += 1
+            args.pop(0)
+        elif args[0] == "--help":
+            print(f"anaconda-anon-usage {__version__} (Python package)")
+            print()
+            print("Usage: anaconda-anon-usage [options]")
+            print()
+            print("Options:")
+            print("  --verbose          Increase verbosity")
+            print("  --detail           Print per-token provenance")
+            print("  --prefix PATH      Use PATH as the environment prefix")
+            print("  --jwt TOKEN        Use TOKEN as the Anaconda auth JWT")
+            print("  --no-keyring       Disable keyring lookups")
+            print("  --paths            Print the system token search path")
+            print("  --random           Generate and print a random token")
+            print("  --version          Print the package version")
+            sys.exit(0)
+        elif args[0] == "--version":
+            print(__version__)
+            sys.exit(0)
+        elif args[0] == "--paths":
+            for p in _search_path():
+                print(p)
+            sys.exit(0)
+        elif args[0] == "--random":
+            print(_random_token())
+            sys.exit(0)
+        elif args[0] == "--prefix":
+            args.pop(0)
+            prefix = args.pop(0) if args else None
+            if prefix is None:
+                print("--prefix requires a value", file=sys.stderr)
+                sys.exit(1)
+        elif args[0] == "--jwt":
+            args.pop(0)
+            jwt = args.pop(0) if args else None
+            if jwt is None:
+                print("--jwt requires a value", file=sys.stderr)
+                sys.exit(1)
+        elif args[0] == "--detail":
+            detail = True
+            args.pop(0)
+        elif args[0] == "--no-keyring":
+            no_keyring = True
+            args.pop(0)
+        else:
+            print(f"Unknown option: {args[0]}", file=sys.stderr)
+            sys.exit(1)
+
+    if verbosity:
+        from . import utils
+
+        utils.DEBUG = True
+    if jwt:
+        os.environ["ANACONDA_AUTH_API_KEY"] = jwt
+    elif no_keyring:
+        os.environ["ANACONDA_DOMAIN"] = "__disabled__"
+
+    print(token_string(prefix))
+    if detail:
+        tokens = all_tokens(prefix)
+        field_info = [
+            ("c", "client", tokens.client, "~/.conda/aau_token"),
+            ("s", "session", tokens.session, "random (per-process)"),
+            (
+                "e",
+                "environment",
+                tokens.environment,
+                f"{prefix or '$CONDA_PREFIX'}/etc/aau_token",
+            ),
+            ("a", "anaconda", tokens.anaconda_cloud, "jwt (sub claim)"),
+        ]
+        for pfx, label, value, source in field_info:
+            if value:
+                print(f"  {pfx}/{value} ({label}) <- {source}")
+        for pfx, label, fname in [
+            ("i", "installer", INSTALLER_TOKEN_NAME),
+            ("o", "organization", ORG_TOKEN_NAME),
+            ("m", "machine", MACHINE_TOKEN_NAME),
+        ]:
+            for v, source in _system_tokens(fname, label, with_source=True):
+                print(f"  {pfx}/{v} ({label}) <- {source}")
+
+
 if __name__ == "__main__":
-    if "--random" in sys.argv:
-        print(_random_token())
-    else:
-        print(token_string())
+    _cli()

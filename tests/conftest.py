@@ -7,7 +7,6 @@ from os import mkdir
 from os.path import dirname, join
 
 import pytest
-from conda.base import constants as c_constants
 from conda.base.context import Context, context
 
 from anaconda_anon_usage import tokens, utils
@@ -69,15 +68,20 @@ def _system_token_path(npaths=1):
     with tempfile.TemporaryDirectory() as tname:
         utils._cache_clear("_search_path", "organization_token", "machine_token")
         tname = tname.replace("\\", "/")
-        o_path = c_constants.SEARCH_PATH
+        # Build the fake search path tuple in the same format as the old code:
+        # ("/tmp/fake/condarc.d/", "t0/.condarc", "t0/condarc", "t0/condarc.d/", ...)
+        dirs = []
         n_path = ("/tmp/fake/condarc.d/",)
         for k in range(npaths):
             tdir = join(tname, "t%d" % k)
             mkdir(tdir)
+            dirs.append(tdir)
             n_path += (tdir + "/.condarc", tdir + "/condarc", tdir + "/condarc.d/")
-        c_constants.SEARCH_PATH = n_path
+        # Patch _search_path directly — it no longer reads conda constants
+        o_search_path = tokens._search_path
+        tokens._search_path = lambda: dirs
         yield n_path
-        c_constants.SEARCH_PATH = o_path
+        tokens._search_path = o_search_path
         utils._cache_clear("_search_path", "organization_tokens", "machine_tokens")
 
 

@@ -19,6 +19,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  rust-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Retrieve the source code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: 0
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    - name: Check formatting
+      working-directory: rust
+      run: cargo fmt --check
+    - name: Run clippy
+      working-directory: rust
+      run: cargo clippy --features cli -- -D warnings
+    - name: Run tests
+      working-directory: rust
+      run: cargo test --features cli --verbose
+    - name: Build release binary
+      working-directory: rust
+      run: cargo build --features cli --release
+    - name: Upload Rust binary
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: rust-bin-${{ matrix.os }}
+        path: |
+          rust/target/release/anaconda-anon-usage
+          rust/target/release/anaconda-anon-usage.exe
+        if-no-files-found: error
   build:
     runs-on: ubuntu-latest
     steps:
@@ -40,7 +75,7 @@ jobs:
         name: conda-bld
         path: conda-bld/
   test:
-    needs: build
+    needs: [build, rust-test]
     env:
       ANACONDA_ANON_USAGE_DEBUG: 1
       ANACONDA_ANON_USAGE_RAISE: 1
@@ -59,13 +94,13 @@ jobs:
         # 23.7.0 : first plugin-based variant, but conda info --envs --json is broken
         # 23.9.0 : last variant with the classic default solver
         # 23.10.0 : first variant with the libmamba default solver
-        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.11.0', '24.11.3', '25.9.1', '26.1.1']
+        cversion: ['4.11.0', '4.14.0', '22.11.1', '23.5.2', '23.7.1', '23.9.0', '23.11.0', '24.11.3', '25.11.1', '26.3.2']
         # Use the last Anaconda-released version of conda on osx-64
         exclude:
           - os: macos-15-intel
-            cversion: '25.9.1'
+            cversion: '25.11.1'
           - os: macos-15-intel
-            cversion: '26.1.1'
+            cversion: '26.3.2'
         include:
           - os: macos-15-intel
             cversion: '25.7.0'
@@ -80,6 +115,15 @@ jobs:
       with:
         name: conda-bld
         path: conda-bld
+    - name: Download Rust binary
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' || matrix.os == 'windows-latest'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: rust-bin-${{ matrix.os }}
+        path: rust/target/release
+    - name: Make Rust binary executable
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+      run: chmod +x rust/target/release/anaconda-anon-usage
     - name: Setup Miniconda
       uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
       with:
@@ -125,8 +169,14 @@ jobs:
         conda activate base
         conda info 2>&1 | tee output.txt
         if grep -q 'Error loading' output.txt; then exit -1; fi
-        pytest
+        pytest --ignore=tests/test_rust_parity.py
         python tests/integration/test_config.py
+    - name: Run Rust parity tests
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' || matrix.os == 'windows-latest'
+      run: |
+        source testenv/etc/profile.d/conda.sh
+        conda activate base
+        pytest tests/test_rust_parity.py -v
     - name: Test heartbeats (pwsh)
       if: matrix.os == 'windows-latest' && matrix.cversion >= '24' && matrix.cversion < '4'
       shell: pwsh
@@ -177,7 +227,13 @@ jobs:
   upload:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
+    - name: Retrieve the source code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: 0
     - name: Download build artfiacts
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
@@ -194,3 +250,21 @@ jobs:
         [[ "$GITHUB_REF" =~ ^refs/tags/ ]] || export LABEL="--label dev"
         packages=$(ls -1 conda-bld/*/*.{tar.bz2,conda} 2>/dev/null || :)
         anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL $packages --force
+    - name: Install Rust toolchain
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      uses: dtolnay/rust-toolchain@stable
+    - name: Set crate version from git tag
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      working-directory: rust
+      run: |
+        VERSION="${{ github.ref_name }}"
+        echo "Setting crate version to $VERSION"
+        sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+        cat Cargo.toml | head -6
+    - name: Publish crate to crates.io
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      working-directory: rust
+      run: |
+        # --allow-dirty: the "Set crate version" step patches Cargo.toml
+        # without committing, so cargo sees a dirty working tree.
+        cargo publish --allow-dirty
