@@ -148,13 +148,12 @@ pub fn read_file(fpath: &Path, label: &str, single_line: bool) -> Result<String>
     }
 
     match fs::read_to_string(fpath) {
-        Ok(mut data) => {
-            if single_line {
-                data = data.trim().to_string();
-                if let Some(line) = data.lines().next() {
-                    data = line.to_string();
-                }
-            }
+        Ok(data) => {
+            let data = if single_line {
+                data.trim().lines().next().unwrap_or("").to_string()
+            } else {
+                data
+            };
             debug!("Retrieved {}: {}", label, data);
             Ok(data)
         }
@@ -195,7 +194,9 @@ pub fn saved_token(
 
     if node_tie {
         let current_node = get_node_str();
-        let npath = PathBuf::from(format!("{}_host", fpath.display()));
+        let mut npath = fpath.as_os_str().to_owned();
+        npath.push("_host");
+        let npath = PathBuf::from(npath);
         let saved_node = read_file(&npath, "Host id", true)?;
 
         if !regenerate && !saved_node.is_empty() {
@@ -214,18 +215,7 @@ pub fn saved_token(
                 "Updating"
             };
             debug!("{} host ID: {}", action, current_node);
-
-            if write_attempt(None, &npath, &current_node) == WriteStatus::Defer {
-                DEFERRED
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .push(DeferredWrite {
-                        must_exist: None,
-                        filepath: npath,
-                        token: current_node,
-                        label: "Host ID".to_string(),
-                    });
-            }
+            write_attempt(None, &npath, &current_node);
         }
     }
 

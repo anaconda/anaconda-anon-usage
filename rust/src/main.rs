@@ -10,8 +10,12 @@ fn usage() -> ! {
     eprintln!("Options:");
     eprintln!("  --verbose          Enable debug logging");
     eprintln!("  --detail           Print per-token provenance");
-    eprintln!("  --prefix PATH      Use PATH as the environment prefix");
+    eprintln!("  --env-prefix PATH  Use PATH as the environment prefix");
     eprintln!("  --jwt TOKEN        Use TOKEN as the Anaconda auth JWT");
+    eprintln!("  --platform         Include platform tokens (e.g., Darwin/25.2.0 OSX/26.2)");
+    eprintln!("  --ua-prefix STR    Prepend STR to the token string (e.g., \"ana/0.1.0\")");
+    eprintln!("  --rattler VER      Include rattler/VER token");
+    eprintln!("  --reqwest VER      Include reqwest/VER token");
     eprintln!("  --no-keyring       Disable keyring lookups (no-op for Rust)");
     eprintln!("  --paths            Print the system token search path");
     eprintln!("  --random           Generate and print a random token");
@@ -41,9 +45,13 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     let mut verbosity: u8 = 0;
-    let mut prefix: Option<String> = None;
+    let mut env_prefix: Option<String> = None;
     let mut jwt: Option<String> = None;
     let mut detail = false;
+    let mut platform = false;
+    let mut ua_prefix: Option<String> = None;
+    let mut rattler_version: Option<String> = None;
+    let mut reqwest_version: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -66,13 +74,28 @@ fn main() {
                 println!("{}", anaconda_anon_usage::random_token());
                 return;
             }
-            "--prefix" => {
+            "--prefix" | "--env-prefix" => {
                 i += 1;
-                prefix = Some(args.get(i).unwrap_or_else(|| usage()).clone());
+                env_prefix = Some(args.get(i).unwrap_or_else(|| usage()).clone());
             }
             "--jwt" => {
                 i += 1;
                 jwt = Some(args.get(i).unwrap_or_else(|| usage()).clone());
+            }
+            "--platform" => {
+                platform = true;
+            }
+            "--ua-prefix" => {
+                i += 1;
+                ua_prefix = Some(args.get(i).unwrap_or_else(|| usage()).clone());
+            }
+            "--rattler" => {
+                i += 1;
+                rattler_version = Some(args.get(i).unwrap_or_else(|| usage()).clone());
+            }
+            "--reqwest" => {
+                i += 1;
+                reqwest_version = Some(args.get(i).unwrap_or_else(|| usage()).clone());
             }
             "--detail" => {
                 detail = true;
@@ -92,8 +115,12 @@ fn main() {
     init_tracing(verbosity);
 
     let config = Config {
-        env_prefix: prefix,
+        env_prefix,
         anaconda_jwt: jwt,
+        platform,
+        prefix: ua_prefix,
+        rattler_version,
+        reqwest_version,
     };
 
     println!("{}", anaconda_anon_usage::token_string(&config));
@@ -102,9 +129,5 @@ fn main() {
         for t in &entries {
             println!("  {}/{} ({}) <- {}", t.prefix, t.value, t.label, t.source);
         }
-    }
-
-    if let Err(e) = anaconda_anon_usage::finalize_deferred_writes() {
-        eprintln!("Warning: failed to flush deferred writes: {}", e);
     }
 }

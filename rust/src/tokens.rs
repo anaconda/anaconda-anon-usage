@@ -79,11 +79,12 @@ where
 /// - `$CONDA_ROOT` (derived from `$CONDA_EXE` — the base/root environment)
 /// - `$XDG_CONFIG_HOME/conda`, `~/.config/conda`, `~/.conda`
 /// - `$CONDA_PREFIX` (the currently active environment)
-/// - Strips `/.condarc` suffixes to get parent directories
-/// - Excludes the home directory itself (from `~/.condarc`)
-/// - Only returns directories that exist on disk, deduplicated
 ///
-/// Cached in a `LazyLock` — filesystem checks happen once per process.
+/// May include directories that do not exist on disk. Callers handle
+/// missing files/directories gracefully. Token deduplication happens
+/// in `parse_token_values`, so duplicate paths are harmless.
+///
+/// Cached in a `LazyLock` — computed once per process.
 pub fn search_path() -> &'static [PathBuf] {
     &SEARCH_PATH
 }
@@ -383,20 +384,120 @@ fn anaconda_cloud_token(jwt: Option<&str>) -> Option<String> {
     jwt_to_token(jwt)
 }
 
+/// Parse a prefix string into TokenEntry values.
+///
+/// Each whitespace-delimited word becomes its own entry. Words containing
+/// `/` are split into `prefix/value`; words without `/` use the whole
+/// word as the prefix with an empty value.
+fn parse_prefix(prefix: &str) -> Vec<TokenEntry> {
+    prefix
+        .split_whitespace()
+        .map(|word| {
+            let (name, value) = match word.split_once('/') {
+                Some((n, v)) => (n.to_string(), v.to_string()),
+                None => (word.to_string(), String::new()),
+            };
+            TokenEntry {
+                prefix: name,
+                label: "prefix".into(),
+                value,
+                source: "config".into(),
+            }
+        })
+        .collect()
+}
+
 /// Collect all AAU tokens with provenance information.
 ///
-/// This is the single source of truth for token assembly. The `aau/` version
-/// entry is included as the first element. The token string can be exactly
-/// reproduced by joining entries as `"{prefix}/{value}"`.
+/// This is the single source of truth for token assembly. The ordering is:
+/// 1. Prefix entries (from `config.prefix`)
+/// 2. Reqwest version (if `reqwest` feature is enabled)
+/// 3. Platform tokens (if `config.platform` is true)
+/// 4. Rattler version (if `rattler` feature is enabled)
+/// 5. AAU tokens (`aau/`, `c/`, `s/`, `e/`, `a/`, `i/`, `o/`, `m/`)
+///
+/// The token string can be exactly reproduced by joining entries as
+/// `"{prefix}/{value}"` (or just `"{prefix}"` when value is empty).
 fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
     let mut entries = Vec::new();
 
-    // Version (always first)
+    // 1. Prefix entries
+    if let Some(ref prefix) = config.prefix {
+        entries.extend(parse_prefix(prefix));
+    }
+
+    // 2. Reqwest version (before platform tokens)
+    {
+        let ver: Option<&str> = config.reqwest_version.as_deref().or({
+            #[cfg(feature = "reqwest")]
+            {
+                Some(crate::REQWEST_VERSION)
+            }
+            #[cfg(not(feature = "reqwest"))]
+            {
+                None
+            }
+        });
+        if let Some(v) = ver.filter(|s| !s.is_empty()) {
+            entries.push(TokenEntry {
+                prefix: "reqwest".into(),
+                label: "http".into(),
+                value: v.to_string(),
+                source: if config.reqwest_version.is_some() {
+                    "config"
+                } else {
+                    "build (Cargo.lock)"
+                }
+                .into(),
+            });
+        }
+    }
+
+    // 3. Platform tokens
+    if config.platform {
+        for pt in crate::platform::platform_tokens() {
+            entries.push(TokenEntry {
+                prefix: pt.name.clone(),
+                label: "platform".into(),
+                value: pt.value.clone(),
+                source: "system".into(),
+            });
+        }
+    }
+
+    // 4. Rattler version (after platform, before aau)
+    {
+        let ver: Option<&str> = config.rattler_version.as_deref().or({
+            #[cfg(feature = "rattler")]
+            {
+                Some(crate::RATTLER_VERSION)
+            }
+            #[cfg(not(feature = "rattler"))]
+            {
+                None
+            }
+        });
+        if let Some(v) = ver.filter(|s| !s.is_empty()) {
+            entries.push(TokenEntry {
+                prefix: "rattler".into(),
+                label: "solver".into(),
+                value: v.to_string(),
+                source: if config.rattler_version.is_some() {
+                    "config"
+                } else {
+                    "build (Cargo.lock)"
+                }
+                .into(),
+            });
+        }
+    }
+
+    // 5. AAU version (always first of the AAU tokens)
     entries.push(TokenEntry {
-        prefix: "aau",
-        label: "version",
+        prefix: "aau".into(),
+        label: "version".into(),
         value: VERSION.to_string(),
-        source: "build".to_string(),
+        source: "build".into(),
     });
 
     // Client token
@@ -406,8 +507,8 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
             .map(|h| h.join(".conda/aau_token").display().to_string())
             .unwrap_or_default();
         entries.push(TokenEntry {
-            prefix: "c",
-            label: "client",
+            prefix: "c".into(),
+            label: "client".into(),
             value: client,
             source,
         });
@@ -417,10 +518,10 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
     let session = session_token()?;
     if !session.is_empty() {
         entries.push(TokenEntry {
-            prefix: "s",
-            label: "session",
+            prefix: "s".into(),
+            label: "session".into(),
             value: session,
-            source: "random (per-process)".to_string(),
+            source: "random (per-process)".into(),
         });
     }
 
@@ -433,8 +534,8 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
             .map(|p| format!("{}/etc/aau_token", p))
             .unwrap_or_default();
         entries.push(TokenEntry {
-            prefix: "e",
-            label: "environment",
+            prefix: "e".into(),
+            label: "environment".into(),
             value: environment,
             source: env_path,
         });
@@ -445,10 +546,10 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
     let jwt_key = format!("anaconda_cloud_token_{}", jwt.as_deref().unwrap_or(""));
     if let Some(cloud) = cached_option(&jwt_key, || anaconda_cloud_token(jwt.as_deref())) {
         entries.push(TokenEntry {
-            prefix: "a",
-            label: "anaconda",
+            prefix: "a".into(),
+            label: "anaconda".into(),
             value: cloud,
-            source: "JWT".to_string(),
+            source: "JWT".into(),
         });
     }
 
@@ -462,8 +563,8 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
             cached_system_tokens(fname, || system_tokens_with_source(fname, label, env_var))
         {
             entries.push(TokenEntry {
-                prefix: prefix_char,
-                label,
+                prefix: prefix_char.into(),
+                label: label.into(),
                 value: token,
                 source,
             });
@@ -473,11 +574,9 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
     Ok(entries)
 }
 
-/// Build the full AAU token string.
+/// Build the full token string.
 ///
-/// Format: `aau/0.7.6 c/{client} s/{session} e/{env} a/{cloud} i/{installer} o/{org} m/{machine}`
-///
-/// Equivalent to joining the entries from [`token_details`] as `"{prefix}/{value}"`.
+/// Format: `[prefix...] [reqwest/{ver}] [platform...] [rattler/{ver}] aau/{ver} c/{client} s/{session} e/{env} [a/{cloud}] [i/{installer}] [o/{org}] [m/{machine}]`
 pub fn token_string(config: &Config) -> Result<String> {
     let entries = collect_tokens(config)?;
     let result = entries_to_string(&entries);
@@ -497,10 +596,19 @@ pub fn token_details(config: &Config) -> Result<Vec<TokenEntry>> {
 }
 
 /// Join token entries into a space-separated token string.
+///
+/// Entries with a non-empty value are formatted as `prefix/value`.
+/// Entries with an empty value are formatted as just `prefix`.
 fn entries_to_string(entries: &[TokenEntry]) -> String {
     entries
         .iter()
-        .map(|e| format!("{}/{}", e.prefix, e.value))
+        .map(|e| {
+            if e.value.is_empty() {
+                e.prefix.clone()
+            } else {
+                format!("{}/{}", e.prefix, e.value)
+            }
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -774,7 +882,12 @@ mod tests {
 
     #[test]
     fn token_string_starts_with_version() {
-        let result = token_string(&default_config()).unwrap();
+        let config = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            platform: false,
+            ..Default::default()
+        };
+        let result = token_string(&config).unwrap();
         assert!(result.starts_with(&format!("aau/{}", VERSION)));
     }
 
@@ -795,7 +908,12 @@ mod tests {
 
     #[test]
     fn token_details_first_entry_is_version() {
-        let entries = token_details(&default_config()).unwrap();
+        let config = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            platform: false,
+            ..Default::default()
+        };
+        let entries = token_details(&config).unwrap();
         assert!(!entries.is_empty());
         assert_eq!(entries[0].prefix, "aau");
         assert_eq!(entries[0].label, "version");
@@ -807,11 +925,162 @@ mod tests {
         let config = default_config();
         let string = token_string(&config).unwrap();
         let entries = token_details(&config).unwrap();
-        let rebuilt: String = entries
-            .iter()
-            .map(|e| format!("{}/{}", e.prefix, e.value))
-            .collect::<Vec<_>>()
-            .join(" ");
+        let rebuilt = entries_to_string(&entries);
         assert_eq!(string, rebuilt);
+    }
+
+    // ---- parse_prefix ----
+
+    #[test]
+    fn parse_prefix_single_token() {
+        let entries = parse_prefix("ana/0.1.0");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].prefix, "ana");
+        assert_eq!(entries[0].value, "0.1.0");
+        assert_eq!(entries[0].label, "prefix");
+    }
+
+    #[test]
+    fn parse_prefix_multiple_tokens() {
+        let entries = parse_prefix("ana/0.1.0 rattler/0.40.5");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].prefix, "ana");
+        assert_eq!(entries[0].value, "0.1.0");
+        assert_eq!(entries[1].prefix, "rattler");
+        assert_eq!(entries[1].value, "0.40.5");
+    }
+
+    #[test]
+    fn parse_prefix_bare_word() {
+        let entries = parse_prefix("myapp");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].prefix, "myapp");
+        assert_eq!(entries[0].value, "");
+    }
+
+    #[test]
+    fn parse_prefix_empty_string() {
+        let entries = parse_prefix("");
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn parse_prefix_extra_whitespace() {
+        let entries = parse_prefix("  ana/0.1.0   rattler/0.40.5  ");
+        assert_eq!(entries.len(), 2);
+    }
+
+    // ---- entries_to_string with empty values ----
+
+    #[test]
+    fn entries_to_string_with_empty_value() {
+        let entries = vec![
+            TokenEntry {
+                prefix: "myapp".into(),
+                label: "prefix".into(),
+                value: "".into(),
+                source: "config".into(),
+            },
+            TokenEntry {
+                prefix: "aau".into(),
+                label: "version".into(),
+                value: "0.7.6".into(),
+                source: "build".into(),
+            },
+        ];
+        assert_eq!(entries_to_string(&entries), "myapp aau/0.7.6");
+    }
+
+    // ---- prefix + platform ordering ----
+
+    #[test]
+    fn token_string_with_prefix_prepends() {
+        let config = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            prefix: Some("ana/0.1.0".into()),
+            platform: false,
+            ..Default::default()
+        };
+        let result = token_string(&config).unwrap();
+        assert!(
+            result.starts_with("ana/0.1.0 aau/"),
+            "expected prefix first, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn token_string_with_platform_prepends() {
+        let config = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            platform: true,
+            ..Default::default()
+        };
+        let result = token_string(&config).unwrap();
+        // Platform tokens come before aau/
+        let aau_pos = result.find("aau/").expect("should contain aau/");
+        assert!(
+            aau_pos > 0,
+            "expected platform tokens before aau/, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn token_string_prefix_before_platform_before_aau() {
+        let config = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            prefix: Some("ana/0.1.0".into()),
+            platform: true,
+            ..Default::default()
+        };
+        let result = token_string(&config).unwrap();
+        let ana_pos = result.find("ana/0.1.0").expect("should contain prefix");
+        let aau_pos = result.find("aau/").expect("should contain aau/");
+        assert!(
+            ana_pos < aau_pos,
+            "prefix should come before aau tokens, got: {}",
+            result
+        );
+        assert!(
+            result.starts_with("ana/0.1.0"),
+            "prefix should be first, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn token_details_with_prefix_has_prefix_label() {
+        let config = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            prefix: Some("ana/0.1.0 rattler/0.40.5".into()),
+            platform: false,
+            ..Default::default()
+        };
+        let entries = token_details(&config).unwrap();
+        assert_eq!(entries[0].label, "prefix");
+        assert_eq!(entries[0].prefix, "ana");
+        assert_eq!(entries[1].label, "prefix");
+        assert_eq!(entries[1].prefix, "rattler");
+        assert_eq!(entries[2].label, "version");
+        assert_eq!(entries[2].prefix, "aau");
+    }
+
+    #[test]
+    fn token_details_with_platform_has_platform_label() {
+        let config = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            platform: true,
+            ..Default::default()
+        };
+        let entries = token_details(&config).unwrap();
+        // First entry should be platform
+        assert_eq!(entries[0].label, "platform");
+        // Find the aau entry
+        let aau_idx = entries.iter().position(|e| e.prefix == "aau").unwrap();
+        // All entries before aau should be platform
+        for e in &entries[..aau_idx] {
+            assert_eq!(e.label, "platform");
+        }
     }
 }

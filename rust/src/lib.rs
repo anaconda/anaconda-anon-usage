@@ -5,7 +5,7 @@
 //!
 //! # Token string format
 //!
-//! `aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [o/{org}] [m/{machine}] [i/{installer}]`
+//! `[prefix...] [platform...] aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [o/{org}] [m/{machine}] [i/{installer}]`
 //!
 //! # Usage
 //!
@@ -15,10 +15,13 @@
 //! let config = Config {
 //!     env_prefix: Some("/path/to/env".into()),
 //!     anaconda_jwt: None, // provide a JWT to include the a/ token
+//!     prefix: Some("ana/0.1.0 rattler/0.40.5".into()),
+//!     platform: true,
 //!     ..Default::default()
 //! };
 //!
-//! // Simple token string (for User-Agent headers)
+//! // Full token string (for User-Agent headers)
+//! // e.g., "ana/0.1.0 rattler/0.40.5 Darwin/25.2.0 OSX/26.2 aau/0.7.6 c/... s/..."
 //! let tokens = token_string(&config);
 //!
 //! // Per-token details (for diagnostics)
@@ -27,6 +30,7 @@
 //! }
 //! ```
 
+pub mod platform;
 mod tokens;
 mod utils;
 
@@ -36,8 +40,22 @@ use std::sync::{LazyLock, Mutex};
 /// AAU version — derived from the repository's git tag at build time.
 pub const VERSION: &str = env!("AAU_VERSION");
 
+/// Rustc version used to compile the crate (e.g., "1.82.0").
+/// Empty string if detection failed.
+pub const RUSTC_VERSION: &str = env!("RUSTC_VERSION");
+
+/// Rattler version extracted from the consumer's Cargo.lock at build time.
+/// Only populated when the `rattler` feature is enabled.
+#[cfg(feature = "rattler")]
+pub const RATTLER_VERSION: &str = env!("RATTLER_VERSION");
+
+/// Reqwest version extracted from the consumer's Cargo.lock at build time.
+/// Only populated when the `reqwest` feature is enabled.
+#[cfg(feature = "reqwest")]
+pub const REQWEST_VERSION: &str = env!("REQWEST_VERSION");
+
 /// Configuration for AAU token generation.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Conda environment prefix (e.g., `/home/user/.ana/envs/default`).
     /// Falls back to `$CONDA_PREFIX` if `None`.
@@ -49,15 +67,52 @@ pub struct Config {
     /// or perform authentication — the caller is responsible for obtaining
     /// the JWT (e.g., via `anaconda-auth` or `ana-cli`).
     pub anaconda_jwt: Option<String>,
+
+    /// If `true`, platform tokens (e.g., `Darwin/25.2.0 OSX/26.2 rustc/1.82.0`)
+    /// are included in the token string. Defaults to `true` when the `platform`
+    /// feature is enabled, `false` otherwise.
+    pub platform: bool,
+
+    /// An arbitrary string to prepend to the final token string.
+    /// Each whitespace-delimited word becomes its own entry in the token
+    /// `Vec`, preserving `name/value` structure where present.
+    /// Example: `"ana/0.1.0"`.
+    pub prefix: Option<String>,
+
+    /// Rattler version to include in the token string. If `Some`, this
+    /// overrides the compile-time version from the `rattler` feature.
+    /// If `None`, falls back to the compile-time constant (when the
+    /// `rattler` feature is enabled) or is omitted entirely.
+    pub rattler_version: Option<String>,
+
+    /// Reqwest version to include in the token string. If `Some`, this
+    /// overrides the compile-time version from the `reqwest` feature.
+    /// If `None`, falls back to the compile-time constant (when the
+    /// `reqwest` feature is enabled) or is omitted entirely.
+    pub reqwest_version: Option<String>,
+}
+
+#[allow(clippy::derivable_impls)] // platform field depends on cfg!(feature = "platform")
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            env_prefix: None,
+            anaconda_jwt: None,
+            platform: cfg!(feature = "platform"),
+            prefix: None,
+            rattler_version: None,
+            reqwest_version: None,
+        }
+    }
 }
 
 /// A collected token with its provenance (where it came from).
 pub struct TokenEntry {
-    /// Single-character token prefix (`c`, `s`, `e`, `a`, `i`, `o`, `m`).
-    pub prefix: &'static str,
-    /// Human-readable token type (e.g., `"client"`, `"session"`, `"environment"`).
-    pub label: &'static str,
-    /// The token value (base64url-encoded).
+    /// Token name/prefix (e.g., `"c"`, `"aau"`, `"Darwin"`, `"ana"`).
+    pub prefix: String,
+    /// Human-readable token type (e.g., `"client"`, `"session"`, `"platform"`).
+    pub label: String,
+    /// The token value (e.g., base64url-encoded token, version string, etc.).
     pub value: String,
     /// Where this token was read from (file path, env var, or generation method).
     pub source: String,
@@ -102,9 +157,9 @@ pub(crate) struct DeferredWrite {
     pub label: String,
 }
 
-/// Build the AAU token string.
+/// Build the full token string.
 ///
-/// Format: `aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [o/{org}] [m/{machine}] [i/{installer}]`
+/// Format: `[prefix...] [reqwest/{ver}] [platform...] [rattler/{ver}] aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [o/{org}] [m/{machine}] [i/{installer}]`
 pub fn token_string(config: &Config) -> String {
     match tokens::token_string(config) {
         Ok(s) => s,
@@ -128,10 +183,10 @@ pub fn token_details(config: &Config) -> Vec<TokenEntry> {
         Err(e) => {
             tracing::error!("Failed to generate AAU tokens: {}", e);
             vec![TokenEntry {
-                prefix: "aau",
-                label: "version",
+                prefix: "aau".into(),
+                label: "version".into(),
                 value: VERSION.to_string(),
-                source: "build".to_string(),
+                source: "build".into(),
             }]
         }
     }
