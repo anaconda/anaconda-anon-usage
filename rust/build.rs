@@ -9,7 +9,7 @@ fn main() {
     // Derive AAU_VERSION using PEP 440 / semver convention:
     //   On tag:       "0.7.6"
     //   Past tag:     "0.7.6+3.gabcdef0"
-    let version = git_version().unwrap_or_else(|| "0+unknown".to_string());
+    let version = git_version().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
     println!("cargo:rustc-env=AAU_VERSION={}", version);
 }
 
