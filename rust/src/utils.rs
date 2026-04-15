@@ -435,4 +435,23 @@ mod tests {
         final_attempt().unwrap();
         assert_eq!(fs::read_to_string(&fpath).unwrap(), "deferred-value");
     }
+
+    #[test]
+    fn flush_guard_flushes_on_drop() {
+        let dir = tempfile::tempdir().unwrap();
+        let fpath = dir.path().join("guard_tok");
+        {
+            let mut d = DEFERRED.lock().unwrap();
+            d.push(DeferredWrite {
+                must_exist: None,
+                filepath: fpath.clone(),
+                token: "guard-value".to_string(),
+                label: "test".to_string(),
+            });
+        }
+        {
+            let _guard = crate::FlushGuard;
+        } // guard dropped here, should flush
+        assert_eq!(fs::read_to_string(&fpath).unwrap(), "guard-value");
+    }
 }

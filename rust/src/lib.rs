@@ -154,3 +154,26 @@ pub fn search_path() -> &'static [std::path::PathBuf] {
 pub fn finalize_deferred_writes() -> std::result::Result<(), Error> {
     utils::final_attempt()
 }
+
+/// RAII guard that flushes deferred token writes when dropped.
+///
+/// Use this at the top of `main()` to ensure deferred writes are flushed
+/// on exit, similar to Sentry's guard pattern:
+///
+/// ```no_run
+/// let _aau = anaconda_anon_usage::init();
+/// // ... rest of program ...
+/// // deferred writes flushed when _aau is dropped
+/// ```
+pub struct FlushGuard;
+
+impl Drop for FlushGuard {
+    fn drop(&mut self) {
+        let _ = finalize_deferred_writes();
+    }
+}
+
+/// Initialize AAU and return a guard that flushes deferred writes on drop.
+pub fn init() -> FlushGuard {
+    FlushGuard
+}
