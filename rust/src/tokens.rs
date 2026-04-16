@@ -288,10 +288,13 @@ fn session_token() -> Result<String> {
     cached_string("session_token", || random_token("session"))
 }
 
-/// Resolve the environment prefix: explicit arg > CONDA_PREFIX > None.
+/// Resolve the environment prefix: explicit arg > global > CONDA_PREFIX > None.
 fn resolve_prefix(prefix: Option<&str>) -> Option<String> {
     if let Some(p) = prefix {
         return Some(p.to_string());
+    }
+    if let Some(p) = crate::get_env_prefix() {
+        return Some(p);
     }
     std::env::var("CONDA_PREFIX").ok().filter(|s| !s.is_empty())
 }
@@ -876,6 +879,22 @@ mod tests {
     #[test]
     fn anaconda_cloud_token_invalid_jwt_returns_none() {
         assert!(anaconda_cloud_token(Some("not-a-jwt")).is_none());
+    }
+
+    // ---- resolve_prefix / set_env_prefix ----
+
+    #[test]
+    fn resolve_prefix_explicit_wins_over_global() {
+        crate::set_env_prefix("/global/prefix");
+        let result = resolve_prefix(Some("/explicit/prefix"));
+        assert_eq!(result.as_deref(), Some("/explicit/prefix"));
+    }
+
+    #[test]
+    fn resolve_prefix_falls_back_to_global() {
+        crate::set_env_prefix("/global/fallback");
+        let result = resolve_prefix(None);
+        assert_eq!(result.as_deref(), Some("/global/fallback"));
     }
 
     // ---- token_string / token_details ----

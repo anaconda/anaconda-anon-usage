@@ -149,6 +149,26 @@ pub(crate) type Result<T> = std::result::Result<T, Error>;
 /// Global deferred writes for tokens that couldn't be persisted immediately.
 static DEFERRED: LazyLock<Mutex<Vec<DeferredWrite>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
+/// Global environment prefix, set via [`set_env_prefix`].
+///
+/// Consulted by token generation when `Config::env_prefix` is `None`,
+/// before falling back to `$CONDA_PREFIX`.
+static ENV_PREFIX: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
+
+/// Store the conda/pixi environment prefix for token generation.
+///
+/// Call this once the target environment prefix is known. The value is
+/// used as a fallback when `Config::env_prefix` is `None` (and takes
+/// precedence over the `$CONDA_PREFIX` environment variable).
+pub fn set_env_prefix(prefix: impl Into<String>) {
+    *ENV_PREFIX.lock().unwrap_or_else(|e| e.into_inner()) = Some(prefix.into());
+}
+
+/// Read the global environment prefix, if set.
+pub(crate) fn get_env_prefix() -> Option<String> {
+    ENV_PREFIX.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct DeferredWrite {
     pub must_exist: Option<PathBuf>,
