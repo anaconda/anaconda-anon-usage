@@ -52,6 +52,36 @@ If you cannot use RAII (e.g., in FFI contexts), call
 anaconda_anon_usage::finalize_deferred_writes().ok();
 ```
 
+### Setting the environment prefix
+
+The `e/` environment token requires a conda environment prefix. You can
+provide it per-call via `Config::env_prefix`, or set it globally with
+`set_env_prefix()`. The resolution order is:
+
+1. `Config::env_prefix` (explicit per-call)
+2. Global value from `set_env_prefix()`
+3. `$CONDA_PREFIX` environment variable
+
+The global setter is useful when the prefix becomes known at a different
+point in the program than where tokens are generated:
+
+```rust
+// Early in bootstrap, once the target prefix is known:
+anaconda_anon_usage::set_env_prefix("/home/user/.cx");
+
+// Later, in HTTP client construction — picks up the global automatically:
+let config = Config::default();
+let ua = anaconda_anon_usage::token_string(&config);
+```
+
+Read it back with `get_env_prefix()` if needed:
+
+```rust
+if let Some(prefix) = anaconda_anon_usage::get_env_prefix() {
+    println!("Current env prefix: {}", prefix);
+}
+```
+
 ### Generating tokens
 
 ```rust
@@ -141,6 +171,29 @@ let config = Config {
     ..Default::default()  // platform=true from feature flag
 };
 let ua = anaconda_anon_usage::token_string(&config);
+```
+
+### Example: consuming from conda-express (cx)
+
+```toml
+[dependencies]
+anaconda-anon-usage = { version = "0.8.0-pre.7", features = ["platform", "rattler", "reqwest"] }
+```
+
+```rust
+// In main():
+let _aau = anaconda_anon_usage::init();
+
+// Once the target prefix is known:
+anaconda_anon_usage::set_env_prefix(prefix.to_string_lossy());
+
+// In HTTP client construction — no env_prefix needed in Config:
+let config = Config {
+    prefix: Some(format!("cx/{}", env!("CARGO_PKG_VERSION"))),
+    ..Default::default()
+};
+let ua = anaconda_anon_usage::token_string(&config);
+client_builder.user_agent(&ua).build();
 ```
 
 ## Building
@@ -253,7 +306,7 @@ rust/
   Cargo.toml
   build.rs          # Version from git describe; rustc/rattler/reqwest version extraction
   src/
-    lib.rs          # Public API: Config, token_string(), token_details(), init(), FlushGuard
+    lib.rs          # Public API: Config, token_string(), token_details(), init(), FlushGuard, set_env_prefix(), get_env_prefix()
     tokens.rs       # Token collection, JWT parsing, search paths, caching
     utils.rs        # File I/O, random_token(), saved_token(), deferred writes
     platform.rs     # Platform detection: kernel, OS distro, libc, rustc version
@@ -275,8 +328,10 @@ rust/
   Rust tokens are a subset of Python tokens for system token types.
 
 - **Default environment prefix**: Python defaults to `sys.prefix` when no
-  prefix is specified. The Rust crate defaults to `$CONDA_PREFIX`, since
-  `sys.prefix` is a Python-specific concept.
+  prefix is specified. The Rust crate checks `Config::env_prefix`, then the
+  global set via `set_env_prefix()`, then `$CONDA_PREFIX`. The global setter
+  allows consumers to supply the prefix early (e.g., during bootstrap) so
+  that later calls to `token_string()` include the `e/` token automatically.
 
 - **Windows HOME isolation**: The Rust `dirs` crate resolves the home directory
   via the Windows API (`FOLDERID_Profile`), ignoring the `USERPROFILE`
