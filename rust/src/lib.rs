@@ -165,7 +165,7 @@ pub fn set_env_prefix(prefix: impl Into<String>) {
 }
 
 /// Read the global environment prefix, if set.
-pub(crate) fn get_env_prefix() -> Option<String> {
+pub fn get_env_prefix() -> Option<String> {
     ENV_PREFIX.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
