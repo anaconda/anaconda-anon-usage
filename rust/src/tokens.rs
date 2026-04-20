@@ -695,7 +695,10 @@ mod tests {
     fn parse_slash_containing_value_rejected() {
         let mut results = Vec::new();
         parse_token_value("token1/token2", "test", &mut results);
-        assert!(results.is_empty(), "Slash-containing value should be rejected");
+        assert!(
+            results.is_empty(),
+            "Slash-containing value should be rejected"
+        );
     }
 
     #[test]
@@ -759,7 +762,10 @@ mod tests {
         unsafe { std::env::set_var(env_key, "envtoken1/envtoken2") };
         let result = system_tokens_with_source("nonexistent_file", "test", env_key);
         unsafe { std::env::remove_var(env_key) };
-        assert!(result.is_empty(), "Slash-containing token should be rejected");
+        assert!(
+            result.is_empty(),
+            "Slash-containing token should be rejected"
+        );
     }
 
     #[test]

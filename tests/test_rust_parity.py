@@ -424,7 +424,10 @@ class TestSystemTokensParity:
         """Slash-separated tokens in env var should behave identically in both."""
         tmpdir = _isolated_home()
         try:
-            env = {**_isolated_env_for_parity(tmpdir), env_var: "token-alpha/token-beta"}
+            env = {
+                **_isolated_env_for_parity(tmpdir),
+                env_var: "token-alpha/token-beta",
+            }
 
             py_tokens = _python_token_fresh(py_func, env_override=env)
             py_list = [t for t in py_tokens.split("\n") if t]
@@ -448,13 +451,19 @@ class TestSystemTokensParity:
             ("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", "i", "installer_tokens()"),
         ],
     )
-    def test_env_var_with_invalid_char_rejected_identically(self, env_var, prefix, py_func):
+    def test_env_var_with_invalid_char_rejected_identically(
+        self, env_var, prefix, py_func
+    ):
         """A token with invalid chars should be rejected by both implementations
-        in the same way — not discarded by one and salvaged-by-splitting by the other."""
+        in the same way — not discarded by one and salvaged-by-splitting by the other.
+        """
         tmpdir = _isolated_home()
         try:
             # '/' is not in VALID_TOKEN_RE's char class
-            env = {**_isolated_env_for_parity(tmpdir), env_var: "valid-part/also-valid-part"}
+            env = {
+                **_isolated_env_for_parity(tmpdir),
+                env_var: "valid-part/also-valid-part",
+            }
 
             py_tokens = _python_token_fresh(py_func, env_override=env)
             py_list = [t for t in py_tokens.split("\n") if t]
