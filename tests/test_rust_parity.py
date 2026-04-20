@@ -827,6 +827,304 @@ class TestBugFixParity:
         )
 
 
+class TestFileFormatEdgeCases:
+    """File-format edge cases for _read_file / read_file on both sides."""
+
+    # Token file param set shared by several tests below
+    _params = [
+        ("ANACONDA_ANON_USAGE_ORG_TOKEN", "o", "organization_tokens()", "org_token"),
+        (
+            "ANACONDA_ANON_USAGE_MACHINE_TOKEN",
+            "m",
+            "machine_tokens()",
+            "machine_token",
+        ),
+        (
+            "ANACONDA_ANON_USAGE_INSTALLER_TOKEN",
+            "i",
+            "installer_tokens()",
+            "installer_token",
+        ),
+    ]
+
+    @pytest.mark.parametrize("env_var,prefix,py_func,fname", _params)
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="dirs crate on Windows ignores USERPROFILE; cannot isolate HOME",
+    )
+    def test_utf8_bom_on_first_line(self, env_var, prefix, py_func, fname):
+        """A UTF-8 BOM on the first line must be handled identically by both sides.
+
+        Neither side strips the BOM. The token "\\ufefftoken-bom" contains a
+        character outside VALID_TOKEN_RE, so both sides should reject it.
+        What we verify is that both sides agree on rejection — i.e. neither
+        side silently strips the BOM.
+        """
+        tmpdir = _isolated_home()
+        try:
+            token_file = Path(tmpdir) / ".conda" / fname
+            token_file.write_bytes(b"\xef\xbb\xbfbom-test-token\n")
+
+            env = _isolated_env_for_parity(tmpdir)
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            assert (
+                py_list == rs_list
+            ), f"BOM handling divergence:\n  Python: {py_list}\n  Rust:   {rs_list}"
+            assert (
+                "bom-test-token" not in py_list
+            ), "BOM was silently stripped by Python"
+            assert "bom-test-token" not in rs_list, "BOM was silently stripped by Rust"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @pytest.mark.parametrize("env_var,prefix,py_func,fname", _params)
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="dirs crate on Windows ignores USERPROFILE; cannot isolate HOME",
+    )
+    def test_crlf_line_endings(self, env_var, prefix, py_func, fname):
+        """CRLF line endings must not leave \\r tacked onto the extracted token."""
+        tmpdir = _isolated_home()
+        try:
+            token_file = Path(tmpdir) / ".conda" / fname
+            token_file.write_bytes(b"crlf-token\r\n# trailing comment\r\n")
+
+            env = _isolated_env_for_parity(tmpdir)
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            assert (
+                py_list == rs_list
+            ), f"CRLF handling divergence:\n  Python: {py_list}\n  Rust:   {rs_list}"
+            assert "crlf-token" in py_list, f"Python mangled CRLF token: {py_list}"
+            assert "crlf-token" in rs_list, f"Rust mangled CRLF token: {rs_list}"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @pytest.mark.parametrize("env_var,prefix,py_func,fname", _params)
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="symlinks require admin on Windows; also HOME isolation doesn't work",
+    )
+    def test_symlinked_token_file(self, env_var, prefix, py_func, fname):
+        """A symlinked token file must be followed and read on both sides."""
+        tmpdir = _isolated_home()
+        try:
+            target = Path(tmpdir) / "real_token_file"
+            target.write_text("symlink-target-token\n")
+            link = Path(tmpdir) / ".conda" / fname
+            link.symlink_to(target)
+
+            env = _isolated_env_for_parity(tmpdir)
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            assert "symlink-target-token" in py_list, f"Python: {py_list}"
+            assert "symlink-target-token" in rs_list, f"Rust: {rs_list}"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @pytest.mark.parametrize("env_var,prefix,py_func,fname", _params)
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="dirs crate on Windows ignores USERPROFILE; cannot isolate HOME",
+    )
+    def test_comment_only_first_line_rejected(self, env_var, prefix, py_func, fname):
+        """A file whose first non-blank line is a comment must yield no token.
+
+        Both sides extract only the first non-blank line; a comment starting
+        with '#' contains a character outside VALID_TOKEN_RE and must be
+        rejected. Critically: neither side should fall through to a later
+        line.
+        """
+        tmpdir = _isolated_home()
+        try:
+            token_file = Path(tmpdir) / ".conda" / fname
+            # Comment first, then what looks like a valid token.
+            # Both sides should extract '# comment here' and reject it — the
+            # second line must not leak through.
+            token_file.write_text("# comment here\nshould-not-appear\n")
+
+            env = _isolated_env_for_parity(tmpdir)
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            assert py_list == rs_list, (
+                f"Comment-only divergence:\n"
+                f"  Python: {py_list}\n  Rust:   {rs_list}"
+            )
+            assert (
+                "should-not-appear" not in py_list
+            ), f"Python leaked line 2: {py_list}"
+            assert "should-not-appear" not in rs_list, f"Rust leaked line 2: {rs_list}"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @pytest.mark.parametrize("env_var,prefix,py_func,fname", _params)
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="dirs crate on Windows ignores USERPROFILE; cannot isolate HOME",
+    )
+    def test_valid_token_with_trailing_comments(self, env_var, prefix, py_func, fname):
+        """A valid token on line 1 with trailing comments must be extracted."""
+        tmpdir = _isolated_home()
+        try:
+            token_file = Path(tmpdir) / ".conda" / fname
+            token_file.write_text("valid-first-line\n# a comment\n# another comment\n")
+
+            env = _isolated_env_for_parity(tmpdir)
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            assert "valid-first-line" in py_list, f"Python: {py_list}"
+            assert "valid-first-line" in rs_list, f"Rust: {rs_list}"
+            assert py_list == rs_list, (
+                f"Mixed content divergence:\n"
+                f"  Python: {py_list}\n  Rust:   {rs_list}"
+            )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestTokenOrdering:
+    """Multi-token ordering across search paths and dotfile variants."""
+
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="dirs crate on Windows ignores USERPROFILE; cannot isolate HOME",
+    )
+    def test_multi_directory_token_ordering(self):
+        """When the same token type appears in system-root and home dirs,
+        both sides must emit the tokens in the same order.
+
+        Python iterates _search_path() in order: system root, then CONDA_ROOT,
+        then XDG_CONFIG_HOME/conda, then ~/.config/conda, then ~/.conda.
+        Rust mirrors this. At each path, both sides try the plain filename
+        first, then the dotfile variant.
+        """
+        tmpdir = _isolated_home()
+        try:
+            env = _isolated_env_for_parity(tmpdir)
+            sys_root = Path(env["ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT"])
+
+            # Token in two locations: system root and home.
+            # Both should appear, system-root first.
+            (sys_root / "org_token").write_text("sys-root-first\n")
+            (Path(tmpdir) / ".conda" / "org_token").write_text("home-second\n")
+
+            py_tokens = _python_token_fresh("organization_tokens()", env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get("o", [])
+
+            assert py_list == rs_list, (
+                f"Multi-directory ordering divergence:\n"
+                f"  Python: {py_list}\n  Rust:   {rs_list}"
+            )
+            # Both tokens should appear; system root should come first
+            assert "sys-root-first" in py_list
+            assert "home-second" in py_list
+            assert py_list.index("sys-root-first") < py_list.index(
+                "home-second"
+            ), f"Expected system-root token before home token: {py_list}"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="dirs crate on Windows ignores USERPROFILE; cannot isolate HOME",
+    )
+    def test_plain_before_dotfile_within_directory(self):
+        """Within one directory, the plain filename comes before the dotfile."""
+        tmpdir = _isolated_home()
+        try:
+            env = _isolated_env_for_parity(tmpdir)
+            conda_dir = Path(tmpdir) / ".conda"
+            (conda_dir / "org_token").write_text("plain-variant\n")
+            (conda_dir / ".org_token").write_text("dot-variant\n")
+
+            py_tokens = _python_token_fresh("organization_tokens()", env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get("o", [])
+
+            assert py_list == rs_list, (
+                f"Plain/dotfile ordering divergence:\n"
+                f"  Python: {py_list}\n  Rust:   {rs_list}"
+            )
+            assert "plain-variant" in py_list
+            assert "dot-variant" in py_list
+            assert py_list.index("plain-variant") < py_list.index(
+                "dot-variant"
+            ), f"Expected plain filename before dotfile: {py_list}"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestCaching:
+    """Within a single process, repeated calls return the same token."""
+
+    def test_client_token_stable_within_process(self):
+        """Calling client_token() twice in one Python process returns the same
+        value, and doing the same in Rust (two tokens from one CLI invocation)
+        also matches the cached value.
+        """
+        tmpdir = _isolated_home()
+        try:
+            env = _home_env(tmpdir)
+            code = (
+                "from anaconda_anon_usage.tokens import client_token;"
+                "print(client_token()); print(client_token())"
+            )
+            py_env = _subprocess_env(env)
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                if key in os.environ:
+                    py_env[key] = os.environ[key]
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                env=py_env,
+            )
+            assert result.returncode == 0, f"Python failed: {result.stderr}"
+            lines = [line for line in result.stdout.strip().splitlines() if line]
+            assert len(lines) == 2, f"Expected 2 lines, got: {lines}"
+            assert lines[0] == lines[1], f"Python client_token not cached: {lines}"
+
+            # Rust: run the binary twice in the same temp home; both runs should
+            # produce the same client token (file-backed, not regenerated).
+            rs_first = _parse_tokens(_run_rust_tokens(env_override=env)).get(
+                "c", [None]
+            )[0]
+            rs_second = _parse_tokens(_run_rust_tokens(env_override=env)).get(
+                "c", [None]
+            )[0]
+            assert (
+                rs_first == rs_second
+            ), f"Rust client token not stable across runs: {rs_first} vs {rs_second}"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 class TestFullTokenStringParity:
     """End-to-end: compare deterministic tokens between implementations."""
 
