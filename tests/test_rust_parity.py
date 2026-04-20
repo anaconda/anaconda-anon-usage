@@ -44,16 +44,49 @@ def _find_rust_bin() -> str:
 RUST_BIN = _find_rust_bin()
 
 
-def _run_rust(args, env_override=None):
-    """Run the Rust binary with the given arguments."""
-    env = os.environ.copy()
+# Env vars that must be passed through to subprocesses for them to function at all.
+# On POSIX only PATH is really needed; Windows needs its own minimum set or Python
+# and the Rust binary will fail to initialize.
+_SUBPROCESS_ENV_ALLOWLIST = (
+    "PATH",
+    # Windows essentials — subprocess/Python break without these
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "TEMP",
+    "TMP",
+    "PATHEXT",
+    "COMSPEC",
+    "PROCESSOR_ARCHITECTURE",
+    # macOS/Linux Rust binaries dlopen/link against system libs reachable via these
+    "DYLD_LIBRARY_PATH",
+    "LD_LIBRARY_PATH",
+)
+
+
+def _subprocess_env(env_override=None):
+    """Build a subprocess env from a small allowlist, then apply overrides.
+
+    Nothing from the caller's environment leaks in unless it's on the allowlist.
+    Callers use env_override to add exactly what each test needs.
+    """
+    env = {}
+    for key in _SUBPROCESS_ENV_ALLOWLIST:
+        val = os.environ.get(key)
+        if val is not None:
+            env[key] = val
     if env_override:
         env.update(env_override)
+    return env
+
+
+def _run_rust(args, env_override=None):
+    """Run the Rust binary with the given arguments."""
     result = subprocess.run(
         [RUST_BIN] + args,
         capture_output=True,
         text=True,
-        env=env,
+        env=_subprocess_env(env_override),
     )
     assert (
         result.returncode == 0
@@ -81,9 +114,6 @@ def _parse_tokens(token_string):
 
 def _python_token_fresh(func_name, env_override=None):
     """Run a Python AAU token function in a fresh subprocess to avoid caching."""
-    env = os.environ.copy()
-    if env_override:
-        env.update(env_override)
     code = f"""
 import os, sys
 from anaconda_anon_usage import tokens
@@ -93,11 +123,17 @@ if isinstance(result, list):
 elif result is not None:
     print(result)
 """
+    # Python needs to locate the anaconda_anon_usage package — inherit PYTHONPATH
+    # and the currently-active venv/prefix so imports resolve the same interpreter.
+    py_env = _subprocess_env(env_override)
+    for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+        if key in os.environ and key not in py_env:
+            py_env[key] = os.environ[key]
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        env=env,
+        env=py_env,
     )
     assert result.returncode == 0, f"Python {func_name} failed: {result.stderr}"
     return result.stdout.strip()
@@ -113,20 +149,15 @@ def _home_env(tmpdir):
 def _isolated_env_for_parity(tmpdir):
     """Build an env dict that fully isolates the token search path.
 
-    Covers:
-    - $HOME (via _home_env)
-    - $CONDA_PREFIX, $CONDA_ROOT, $CONDA_EXE, $CONDA_PYTHON_EXE
-    - $XDG_CONFIG_HOME (redirected to nonexistent sandbox path)
-    - /etc/conda, /var/lib/conda, C:/ProgramData/conda
-      (via ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT)
+    With the subprocess env built from a strict allowlist (see _subprocess_env),
+    unknown env vars can't leak in. This helper only has to set the positive
+    values each implementation needs:
+    - $HOME (platform-aware, via _home_env)
+    - ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT — overrides /etc/conda, /var/lib/conda,
+      C:/ProgramData/conda in both Python and Rust implementations
     """
     tmpdir = str(tmpdir)
     env = _home_env(tmpdir)
-    env["CONDA_PREFIX"] = ""
-    env["CONDA_ROOT"] = ""
-    env["CONDA_EXE"] = ""
-    env["CONDA_PYTHON_EXE"] = ""
-    env["XDG_CONFIG_HOME"] = str(Path(tmpdir) / "xdg")
     sys_root = Path(tmpdir) / "fake_etc_conda"
     sys_root.mkdir(exist_ok=True)
     env["ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT"] = str(sys_root)

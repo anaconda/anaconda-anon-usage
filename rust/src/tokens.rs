@@ -161,11 +161,17 @@ fn env_path_grandparent(var: &str) -> Option<PathBuf> {
 fn compute_search_path() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
 
-    // Test-only: override system paths for isolation (not a public API)
-    if let Ok(test_root) = std::env::var("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT") {
-        if !test_root.is_empty() {
-            dirs.push(PathBuf::from(test_root));
-        }
+    // Test-only override, gated at compile time by the `test-support` feature.
+    // Released binaries never see this code path.
+    #[cfg(feature = "test-support")]
+    let test_root = std::env::var("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT")
+        .ok()
+        .filter(|v| !v.is_empty());
+    #[cfg(not(feature = "test-support"))]
+    let test_root: Option<String> = None;
+
+    if let Some(test_root) = test_root {
+        dirs.push(PathBuf::from(test_root));
     } else {
         #[cfg(windows)]
         dirs.push("C:/ProgramData/conda".into());
@@ -1109,5 +1115,52 @@ mod tests {
         for e in &entries[..aau_idx] {
             assert_eq!(e.label, "platform");
         }
+    }
+
+    // ---- test-support feature gating ----
+    // The `test-support` feature must never be enabled in released binaries.
+    // These tests lock in the observable behavior of the gating in both directions.
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn system_root_override_honored_with_test_support() {
+        let tmp = tempfile::tempdir().unwrap();
+        let override_path = tmp.path().to_path_buf();
+        unsafe {
+            std::env::set_var("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT", &override_path);
+        }
+        let search_path = compute_search_path();
+        unsafe {
+            std::env::remove_var("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT");
+        }
+        assert!(
+            search_path.contains(&override_path),
+            "with test-support, override path should appear in search path"
+        );
+        // And the real system dirs should NOT be included when the override is active
+        assert!(
+            !search_path.iter().any(|p| p == &PathBuf::from("/etc/conda")
+                || p == &PathBuf::from("/var/lib/conda")
+                || p == &PathBuf::from("C:/ProgramData/conda")),
+            "override should replace system dirs, not append to them"
+        );
+    }
+
+    #[cfg(not(feature = "test-support"))]
+    #[test]
+    fn system_root_override_ignored_without_test_support() {
+        let tmp = tempfile::tempdir().unwrap();
+        let override_path = tmp.path().to_path_buf();
+        unsafe {
+            std::env::set_var("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT", &override_path);
+        }
+        let search_path = compute_search_path();
+        unsafe {
+            std::env::remove_var("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT");
+        }
+        assert!(
+            !search_path.contains(&override_path),
+            "without test-support, override path MUST NOT appear in search path"
+        );
     }
 }
