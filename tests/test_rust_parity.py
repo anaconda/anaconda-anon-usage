@@ -110,6 +110,29 @@ def _home_env(tmpdir):
     return {"HOME": tmpdir}
 
 
+def _isolated_env_for_parity(tmpdir):
+    """Build an env dict that fully isolates the token search path.
+
+    Covers:
+    - $HOME (via _home_env)
+    - $CONDA_PREFIX, $CONDA_ROOT, $CONDA_EXE, $CONDA_PYTHON_EXE
+    - $XDG_CONFIG_HOME (redirected to nonexistent sandbox path)
+    - /etc/conda, /var/lib/conda, C:/ProgramData/conda
+      (via ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT)
+    """
+    tmpdir = str(tmpdir)
+    env = _home_env(tmpdir)
+    env["CONDA_PREFIX"] = ""
+    env["CONDA_ROOT"] = ""
+    env["CONDA_EXE"] = ""
+    env["CONDA_PYTHON_EXE"] = ""
+    env["XDG_CONFIG_HOME"] = str(Path(tmpdir) / "xdg")
+    sys_root = Path(tmpdir) / "fake_etc_conda"
+    sys_root.mkdir(exist_ok=True)
+    env["ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT"] = str(sys_root)
+    return env
+
+
 def _isolated_home():
     """Create a temp HOME with minimal conda config to isolate token tests."""
     tmpdir = tempfile.mkdtemp()
@@ -375,7 +398,7 @@ class TestSystemTokensParity:
         tmpdir = _isolated_home()
         try:
             test_token = "parity-test-token-42"
-            env = {**_home_env(tmpdir), env_var: test_token}
+            env = {**_isolated_env_for_parity(tmpdir), env_var: test_token}
 
             py_tokens = _python_token_fresh(py_func, env_override=env)
             py_list = [t for t in py_tokens.split("\n") if t]
@@ -388,6 +411,7 @@ class TestSystemTokensParity:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    # Regression test: specifically guards against Rust re-adding slash-splitting
     @pytest.mark.parametrize(
         "env_var,prefix,py_func",
         [
@@ -397,17 +421,63 @@ class TestSystemTokensParity:
         ],
     )
     def test_env_var_slash_separated_tokens(self, env_var, prefix, py_func):
-        """Slash-separated tokens in env var should produce multiple entries."""
+        """Slash-separated tokens in env var should behave identically in both."""
         tmpdir = _isolated_home()
         try:
-            env = {**_home_env(tmpdir), env_var: "token-alpha/token-beta"}
+            env = {
+                **_isolated_env_for_parity(tmpdir),
+                env_var: "token-alpha/token-beta",
+            }
+
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
 
             rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
             rs_list = rs_tokens.get(prefix, [])
 
-            assert (
-                "token-alpha" in rs_list and "token-beta" in rs_list
-            ), f"Rust didn't split slash tokens: {rs_list}"
+            assert py_list == rs_list, (
+                f"Python and Rust diverge on slash-separated input:\n"
+                f"  Python: {py_list}\n"
+                f"  Rust:   {rs_list}"
+            )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @pytest.mark.parametrize(
+        "env_var,prefix,py_func",
+        [
+            ("ANACONDA_ANON_USAGE_ORG_TOKEN", "o", "organization_tokens()"),
+            ("ANACONDA_ANON_USAGE_MACHINE_TOKEN", "m", "machine_tokens()"),
+            ("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", "i", "installer_tokens()"),
+        ],
+    )
+    def test_env_var_with_invalid_char_rejected_identically(
+        self, env_var, prefix, py_func
+    ):
+        """A token with invalid chars should be rejected by both implementations
+        in the same way — not discarded by one and salvaged-by-splitting by the other.
+        """
+        tmpdir = _isolated_home()
+        try:
+            # '/' is not in VALID_TOKEN_RE's char class
+            env = {
+                **_isolated_env_for_parity(tmpdir),
+                env_var: "valid-part/also-valid-part",
+            }
+
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            # If both implementations consider '/' invalid, both should return [].
+            # If Rust "helpfully" splits on '/', it will return the two halves.
+            assert py_list == rs_list, (
+                f"Divergence on slash handling:\n"
+                f"  Python (rejects '/' wholesale): {py_list}\n"
+                f"  Rust (splits on '/'):           {rs_list}"
+            )
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -424,7 +494,7 @@ class TestSystemTokensParity:
         tmpdir = _isolated_home()
         try:
             invalid_token = "x" * 37
-            env = {**_home_env(tmpdir), env_var: invalid_token}
+            env = {**_isolated_env_for_parity(tmpdir), env_var: invalid_token}
 
             py_tokens = _python_token_fresh(py_func, env_override=env)
             py_list = [t for t in py_tokens.split("\n") if t]
@@ -467,7 +537,7 @@ class TestSystemTokensParity:
         else:
             tmpdir = _isolated_home()
             token_file = Path(tmpdir) / ".conda" / fname
-            env = _home_env(tmpdir)
+            env = _isolated_env_for_parity(tmpdir)
 
         token_file.write_text("file-based-token-99\n")
         try:
@@ -509,7 +579,7 @@ class TestSystemTokensParity:
             token_file = Path(tmpdir) / ".conda" / fname
             token_file.write_text("dedup-test-token\n")
 
-            env = {**_home_env(tmpdir), env_var: "dedup-test-token"}
+            env = {**_isolated_env_for_parity(tmpdir), env_var: "dedup-test-token"}
 
             py_tokens = _python_token_fresh(py_func, env_override=env)
             py_list = [t for t in py_tokens.split("\n") if t]
@@ -545,7 +615,7 @@ class TestFullTokenStringParity:
         """
         tmpdir = _isolated_home()
         try:
-            env = {**_home_env(tmpdir), "CONDA_PREFIX": ""}
+            env = _isolated_env_for_parity(tmpdir)
 
             # Set up a known org token so we have something to compare
             conda_dir = Path(tmpdir) / ".conda"
