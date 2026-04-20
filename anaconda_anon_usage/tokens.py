@@ -117,8 +117,12 @@ def _search_path():
         dirs.append(xdg + "/conda")
 
     home = expanduser("~")
-    dirs.append(home + "/.config/conda")
-    dirs.append(home + "/.conda")
+    # If $HOME is unset, expanduser returns "~" verbatim. Skip home-based
+    # entries in that case; appending literal "~/.conda" would point at a
+    # relative path from the cwd, not an unintended system location.
+    if home != "~":
+        dirs.append(home + "/.config/conda")
+        dirs.append(home + "/.conda")
 
     conda_prefix = environ.get("CONDA_PREFIX")
     if conda_prefix and conda_prefix != conda_root:
@@ -217,6 +221,11 @@ def environment_token(prefix=None):
     """
     if prefix is None:
         prefix = sys.prefix
+    # An empty prefix would resolve `join("", "etc", "aau_token")` to the
+    # relative path `etc/aau_token`, which could accidentally target
+    # wherever the process happens to be running. Skip instead.
+    if not prefix:
+        return ""
     fpath = join(prefix, "etc", "aau_token")
     return _saved_token(fpath, "environment", prefix)
 

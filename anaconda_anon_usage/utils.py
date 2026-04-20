@@ -187,10 +187,12 @@ def _read_file(fpath, what, read_only=False, single_line=False):
             with open(fpath) as fp:
                 data = fp.read()
             if single_line:
-                # Use just the first non-blank line of the file
-                data = data.strip()
-                if data:
-                    data = data.splitlines()[0]
+                # Use just the first non-blank line of the file, with
+                # leading/trailing whitespace stripped from that line.
+                data = next(
+                    (line.strip() for line in data.splitlines() if line.strip()),
+                    "",
+                )
             _debug("Retrieved %s: %s", what, data)
             return data
         except Exception as exc:

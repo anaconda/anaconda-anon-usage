@@ -221,20 +221,22 @@ fn is_valid_token(token: &str) -> bool {
 
 /// Parse a single token value, validating and deduplicating.
 ///
-/// The entire trimmed input is treated as one opaque token (no splitting).
+/// The input is treated as one opaque token (no splitting, no trimming).
 /// This matches Python anaconda-anon-usage behavior where each env var or
-/// file value is validated as a whole against VALID_TOKEN_RE.
+/// file value is validated as a whole against VALID_TOKEN_RE. Callers are
+/// responsible for passing pre-stripped file contents; env var values are
+/// passed raw so that spurious whitespace fails validation (as it does in
+/// Python).
 fn parse_token_value(content: &str, source: &str, results: &mut Vec<(String, String)>) {
-    let token = content.trim();
-    if token.is_empty() {
+    if content.is_empty() {
         return;
     }
-    if !is_valid_token(token) {
-        tracing::debug!("Invalid token discarded: {}", token);
+    if !is_valid_token(content) {
+        tracing::debug!("Invalid token discarded: {}", content);
         return;
     }
-    if !results.iter().any(|(t, _)| t == token) {
-        results.push((token.to_string(), source.to_string()));
+    if !results.iter().any(|(t, _)| t == content) {
+        results.push((content.to_string(), source.to_string()));
     }
 }
 
@@ -251,9 +253,10 @@ fn parse_token_value(content: &str, source: &str, results: &mut Vec<(String, Str
 fn system_tokens_with_source(fname: &str, label: &str, env_var: &str) -> Vec<(String, String)> {
     let mut results: Vec<(String, String)> = Vec::new();
 
-    // Check environment variable (additive, same as Python anaconda-anon-usage)
+    // Check environment variable (additive, same as Python anaconda-anon-usage).
+    // Value is passed through raw — Python does not trim, and spurious
+    // whitespace should fail VALID_TOKEN_RE on both sides.
     if let Ok(val) = std::env::var(env_var) {
-        let val = val.trim().to_string();
         if !val.is_empty() {
             tracing::debug!("Found {} token in environment: {}", label, val);
             parse_token_value(&val, &format!("${}", env_var), &mut results);
@@ -370,10 +373,13 @@ fn jwt_to_token(api_key: &str) -> Option<String> {
         tracing::debug!("JWT exp is not a positive integer");
         return None;
     }
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => d.as_secs() as i64,
+        Err(_) => {
+            tracing::debug!("System clock is before UNIX epoch; cannot verify JWT expiration");
+            return None;
+        }
+    };
     if exp < now {
         tracing::debug!("API key expired {}s ago", now - exp);
         return None;
@@ -717,11 +723,13 @@ mod tests {
     }
 
     #[test]
-    fn parse_trims_whitespace() {
+    fn parse_rejects_surrounding_whitespace() {
+        // Python validates env var values verbatim against VALID_TOKEN_RE,
+        // which rejects whitespace. Callers must pre-strip file contents;
+        // env var values are not trimmed.
         let mut results = Vec::new();
         parse_token_value("  plain-token  ", "test", &mut results);
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, "plain-token");
+        assert!(results.is_empty(), "Whitespace should fail validation");
     }
 
     #[test]

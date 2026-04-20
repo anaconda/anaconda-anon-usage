@@ -626,6 +626,207 @@ class TestSystemTokensParity:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+class TestBugFixParity:
+    """Regression tests for specific Python/Rust parity bugs.
+
+    Each test targets a bug that existed before this test class was added.
+    Before the corresponding fix, the test would fail; after, it passes on
+    both implementations.
+    """
+
+    # Bug 1 — Rust previously fell back to now=0 if SystemTime::now() failed,
+    # making any JWT with positive exp appear valid. The fix rejects the JWT.
+    # Cannot force SystemTime failure from a parity test, so we exercise the
+    # adjacent contract that both sides agree on: an expired JWT is rejected.
+    def test_expired_jwt_rejected_by_both(self):
+        """An expired JWT must produce no a/ token in either implementation."""
+        import datetime as dt
+        import json as _json
+
+        def _b64url(obj):
+            raw = _json.dumps(obj).encode("ascii")
+            return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+        exp = int(dt.datetime.now(tz=dt.timezone.utc).timestamp()) - 3600
+        header = _b64url({"alg": "RS256", "typ": "JWT"})
+        payload = _b64url({"exp": exp, "sub": str(uuid.uuid4())})
+        signature = _b64url({"fake": "sig"})
+        expired_jwt = f"{header}.{payload}.{signature}"
+
+        from anaconda_anon_usage.tokens import _jwt_to_token
+
+        assert _jwt_to_token(expired_jwt) is None, "Python accepted expired JWT"
+
+        rs_tokens = _parse_tokens(_run_rust_tokens(extra_args=["--jwt", expired_jwt]))
+        assert "a" not in rs_tokens, f"Rust accepted expired JWT: {rs_tokens.get('a')}"
+
+    # Bug 2 — single_line file reads must strip per-line, not globally. A file
+    # with leading whitespace on the first line (e.g. "  token\n# comment") was
+    # previously returned as "  token" and then rejected by VALID_TOKEN_RE.
+    @pytest.mark.parametrize(
+        "env_var,prefix,py_func",
+        [
+            ("ANACONDA_ANON_USAGE_ORG_TOKEN", "o", "organization_tokens()"),
+            ("ANACONDA_ANON_USAGE_MACHINE_TOKEN", "m", "machine_tokens()"),
+            ("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", "i", "installer_tokens()"),
+        ],
+    )
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="dirs crate on Windows ignores USERPROFILE; cannot isolate HOME",
+    )
+    def test_file_leading_whitespace_stripped_per_line(self, env_var, prefix, py_func):
+        """Token file with whitespace around the first line must strip per-line.
+
+        FIXED in:
+          - anaconda_anon_usage/utils.py :: _read_file (single_line branch)
+          - rust/src/utils.rs :: read_file (single_line branch)
+        """
+        fname_map = {
+            "ANACONDA_ANON_USAGE_ORG_TOKEN": "org_token",
+            "ANACONDA_ANON_USAGE_MACHINE_TOKEN": "machine_token",
+            "ANACONDA_ANON_USAGE_INSTALLER_TOKEN": "installer_token",
+        }
+        fname = fname_map[env_var]
+        tmpdir = _isolated_home()
+        try:
+            token_file = Path(tmpdir) / ".conda" / fname
+            # Leading spaces on the first line + trailing comment. Pre-fix,
+            # Python would return "  token-with-pad" (fails VALID_TOKEN_RE);
+            # Rust would return "token-with-pad" (passes). Post-fix, both
+            # return "token-with-pad" and accept it.
+            token_file.write_text("  token-with-pad  \n# comment\n")
+
+            env = _isolated_env_for_parity(tmpdir)
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            assert py_list == rs_list, (
+                f"Per-line stripping divergence:\n"
+                f"  Python: {py_list}\n"
+                f"  Rust:   {rs_list}"
+            )
+            assert "token-with-pad" in py_list
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # Bug 3 — Python previously appended literal "~/.conda" when $HOME was
+    # unset, turning a missing home directory into an accidental cwd-relative
+    # read. The fix skips home entries when expanduser("~") returns "~".
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows expanduser uses USERPROFILE; different failure mode",
+    )
+    def test_python_skips_home_paths_when_home_unresolvable(self):
+        """With HOME unset, Python _search_path must not include '~/...' entries.
+
+        FIXED in:
+          - anaconda_anon_usage/tokens.py :: _search_path
+        """
+        code = (
+            "import sys\n"
+            "from anaconda_anon_usage.tokens import _search_path\n"
+            "from anaconda_anon_usage.utils import _cache_clear\n"
+            "_cache_clear()\n"
+            "paths = _search_path()\n"
+            "bad = [p for p in paths if p.startswith('~')]\n"
+            "sys.exit(1 if bad else 0)\n"
+        )
+        # Strip HOME from subprocess env. _subprocess_env already excludes it
+        # unless we add it; don't add it.
+        env = {}
+        for key in _SUBPROCESS_ENV_ALLOWLIST:
+            val = os.environ.get(key)
+            if val is not None:
+                env[key] = val
+            if "HOME" in env:
+                del env["HOME"]
+        for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+            if key in os.environ:
+                env[key] = os.environ[key]
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0, (
+            "Python _search_path included a literal '~' entry when HOME was unset.\n"
+            f"stderr: {result.stderr}\nstdout: {result.stdout}"
+        )
+
+    # Bug 4 — Rust previously trimmed env var values before validating them,
+    # so " valid-token " was accepted by Rust but rejected by Python. The fix
+    # passes env var values through raw.
+    @pytest.mark.parametrize(
+        "env_var,prefix,py_func",
+        [
+            ("ANACONDA_ANON_USAGE_ORG_TOKEN", "o", "organization_tokens()"),
+            ("ANACONDA_ANON_USAGE_MACHINE_TOKEN", "m", "machine_tokens()"),
+            ("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", "i", "installer_tokens()"),
+        ],
+    )
+    def test_env_var_surrounding_whitespace_rejected_identically(
+        self, env_var, prefix, py_func
+    ):
+        """Env var with whitespace must be rejected by both (not trimmed by one).
+
+        FIXED in:
+          - rust/src/tokens.rs :: parse_token_value and env var handler
+            (no longer trim env var values before validation)
+        """
+        tmpdir = _isolated_home()
+        try:
+            env = {
+                **_isolated_env_for_parity(tmpdir),
+                env_var: "  whitespace-padded-token  ",
+            }
+
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            assert py_list == rs_list, (
+                f"Divergence on whitespace-padded env token:\n"
+                f"  Python: {py_list}\n"
+                f"  Rust:   {rs_list}"
+            )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # Bug 9 — Python previously resolved join("", "etc", "aau_token") to the
+    # relative path "etc/aau_token" when prefix was the empty string. The fix
+    # skips when prefix is empty, matching Rust.
+    def test_python_skips_environment_token_when_prefix_empty(self):
+        """environment_token('') must return '' (not read a relative path).
+
+        FIXED in:
+          - anaconda_anon_usage/tokens.py :: environment_token
+        """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from anaconda_anon_usage.tokens import environment_token;"
+                    "r = environment_token(''); print('EMPTY' if r == '' else r)"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Python errored: {result.stderr}"
+        assert result.stdout.strip() == "EMPTY", (
+            f"Python environment_token('') did not return empty string: "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+
+
 class TestFullTokenStringParity:
     """End-to-end: compare deterministic tokens between implementations."""
 

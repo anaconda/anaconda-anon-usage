@@ -150,7 +150,13 @@ pub fn read_file(fpath: &Path, label: &str, single_line: bool) -> Result<String>
     match fs::read_to_string(fpath) {
         Ok(data) => {
             let data = if single_line {
-                data.trim().lines().next().unwrap_or("").to_string()
+                // Use just the first non-blank line, with leading/trailing
+                // whitespace stripped from that line.
+                data.lines()
+                    .map(|l| l.trim())
+                    .find(|l| !l.is_empty())
+                    .unwrap_or("")
+                    .to_string()
             } else {
                 data
             };
