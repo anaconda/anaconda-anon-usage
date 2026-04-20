@@ -342,3 +342,12 @@ rust/
   features are Rust-only additions not present in the Python package. These
   tokens are prepended before `aau/` and do not affect parity with Python
   for the core AAU token types.
+
+- **Deferred write lifecycle**: The Python package registers
+  `_final_attempt()` via `atexit.register(...)` at import time, so any
+  deferred token write is flushed automatically when the interpreter exits.
+  Rust has no equivalent global hook, so consumers must opt in: either hold
+  a `FlushGuard` (from `init()`) across the program's lifetime, or call
+  `finalize_deferred_writes()` before exit. Released Rust binaries will
+  silently drop deferred writes if neither is used — this is an intentional
+  API choice, not a parity gap.
