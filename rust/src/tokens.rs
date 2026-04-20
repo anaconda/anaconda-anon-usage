@@ -206,24 +206,22 @@ fn is_valid_token(token: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
-/// Parse a token value string into (token, source) pairs, deduplicating.
+/// Parse a single token value, validating and deduplicating.
 ///
-/// Token files may contain slash-separated multiple tokens (for org/machine tokens
-/// set by administrators). Each token is validated against the AAU format before
-/// inclusion.
-fn parse_token_values(content: &str, source: &str, results: &mut Vec<(String, String)>) {
-    for token in content.split('/') {
-        let token = token.trim();
-        if token.is_empty() {
-            continue;
-        }
-        if !is_valid_token(token) {
-            tracing::debug!("Invalid token discarded: {}", token);
-            continue;
-        }
-        if !results.iter().any(|(t, _)| t == token) {
-            results.push((token.to_string(), source.to_string()));
-        }
+/// The entire trimmed input is treated as one opaque token (no splitting).
+/// This matches Python anaconda-anon-usage behavior where each env var or
+/// file value is validated as a whole against VALID_TOKEN_RE.
+fn parse_token_value(content: &str, source: &str, results: &mut Vec<(String, String)>) {
+    let token = content.trim();
+    if token.is_empty() {
+        return;
+    }
+    if !is_valid_token(token) {
+        tracing::debug!("Invalid token discarded: {}", token);
+        return;
+    }
+    if !results.iter().any(|(t, _)| t == token) {
+        results.push((token.to_string(), source.to_string()));
     }
 }
 
@@ -245,7 +243,7 @@ fn system_tokens_with_source(fname: &str, label: &str, env_var: &str) -> Vec<(St
         let val = val.trim().to_string();
         if !val.is_empty() {
             tracing::debug!("Found {} token in environment: {}", label, val);
-            parse_token_values(&val, &format!("${}", env_var), &mut results);
+            parse_token_value(&val, &format!("${}", env_var), &mut results);
         }
     }
 
@@ -261,7 +259,7 @@ fn system_tokens_with_source(fname: &str, label: &str, env_var: &str) -> Vec<(St
 
             if let Ok(content) = read_file(&fpath, label, true) {
                 if !content.is_empty() {
-                    parse_token_values(&content, &fpath.display().to_string(), &mut results);
+                    parse_token_value(&content, &fpath.display().to_string(), &mut results);
                 }
             }
         }
@@ -676,66 +674,62 @@ mod tests {
         assert!(is_valid_token("x"));
     }
 
-    // ---- parse_token_values ----
+    // ---- parse_token_value ----
 
     #[test]
     fn parse_single_token() {
         let mut results = Vec::new();
-        parse_token_values("mytoken", "test", &mut results);
+        parse_token_value("mytoken", "test", &mut results);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "mytoken");
     }
 
     #[test]
-    fn parse_slash_separated_tokens() {
+    fn parse_slash_containing_value_rejected() {
         let mut results = Vec::new();
-        parse_token_values("token1/token2/token3", "test", &mut results);
-        let tokens: Vec<&str> = results.iter().map(|(t, _)| t.as_str()).collect();
-        assert_eq!(tokens, vec!["token1", "token2", "token3"]);
+        parse_token_value("token1/token2", "test", &mut results);
+        assert!(results.is_empty(), "Slash-containing value should be rejected");
     }
 
     #[test]
     fn parse_deduplicates() {
         let mut results = Vec::new();
-        parse_token_values("dup/dup/dup", "test", &mut results);
+        parse_token_value("dup", "test1", &mut results);
+        parse_token_value("dup", "test2", &mut results);
+        parse_token_value("dup", "test3", &mut results);
         assert_eq!(results.len(), 1);
-    }
-
-    #[test]
-    fn parse_skips_empty_segments() {
-        let mut results = Vec::new();
-        parse_token_values("a//b/", "test", &mut results);
-        let tokens: Vec<&str> = results.iter().map(|(t, _)| t.as_str()).collect();
-        assert_eq!(tokens, vec!["a", "b"]);
     }
 
     #[test]
     fn parse_trims_whitespace() {
         let mut results = Vec::new();
-        parse_token_values("  tok1 / tok2 ", "test", &mut results);
-        let tokens: Vec<&str> = results.iter().map(|(t, _)| t.as_str()).collect();
-        assert_eq!(tokens, vec!["tok1", "tok2"]);
+        parse_token_value("  plain-token  ", "test", &mut results);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "plain-token");
     }
 
     #[test]
-    fn parse_skips_invalid_tokens() {
+    fn parse_rejects_invalid_token() {
         let mut results = Vec::new();
-        parse_token_values("good/b@d!/also-good", "test", &mut results);
-        let tokens: Vec<&str> = results.iter().map(|(t, _)| t.as_str()).collect();
-        assert_eq!(tokens, vec!["good", "also-good"]);
+        parse_token_value("b@d!", "test", &mut results);
+        assert!(results.is_empty(), "Invalid token should be rejected");
+
+        parse_token_value("good", "test", &mut results);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "good");
     }
 
     #[test]
     fn parse_empty_string() {
         let mut results = Vec::new();
-        parse_token_values("", "test", &mut results);
+        parse_token_value("", "test", &mut results);
         assert!(results.is_empty());
     }
 
     #[test]
     fn parse_appends_to_existing() {
         let mut results = vec![("existing".to_string(), "prior".to_string())];
-        parse_token_values("new", "test", &mut results);
+        parse_token_value("new", "test", &mut results);
         let tokens: Vec<&str> = results.iter().map(|(t, _)| t.as_str()).collect();
         assert_eq!(tokens, vec!["existing", "new"]);
     }
@@ -743,7 +737,8 @@ mod tests {
     #[test]
     fn parse_dedup_across_existing() {
         let mut results = vec![("existing".to_string(), "prior".to_string())];
-        parse_token_values("existing/brand-new", "test", &mut results);
+        parse_token_value("existing", "test", &mut results);
+        parse_token_value("brand-new", "test", &mut results);
         let tokens: Vec<&str> = results.iter().map(|(t, _)| t.as_str()).collect();
         assert_eq!(tokens, vec!["existing", "brand-new"]);
     }
@@ -753,11 +748,11 @@ mod tests {
     #[test]
     fn system_tokens_from_env_var() {
         let env_key = "AAU_TEST_SYSTEM_TOKEN_ENV_7382";
+        // Slash-containing value is now rejected (matches Python behavior)
         unsafe { std::env::set_var(env_key, "envtoken1/envtoken2") };
         let result = system_tokens_with_source("nonexistent_file", "test", env_key);
         unsafe { std::env::remove_var(env_key) };
-        let tokens: Vec<&str> = result.iter().map(|(t, _)| t.as_str()).collect();
-        assert_eq!(tokens, vec!["envtoken1", "envtoken2"]);
+        assert!(result.is_empty(), "Slash-containing token should be rejected");
     }
 
     #[test]
