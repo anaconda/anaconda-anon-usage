@@ -37,15 +37,21 @@ jobs:
     - name: Check formatting
       working-directory: rust
       run: cargo fmt --check
-    - name: Run clippy
+    - name: Run clippy (release feature set)
       working-directory: rust
       run: cargo clippy --features cli -- -D warnings
-    - name: Run tests
+    - name: Run clippy (with test-support)
+      working-directory: rust
+      run: cargo clippy --features cli,test-support -- -D warnings
+    - name: Run tests (release feature set, verifies test-support is properly gated)
       working-directory: rust
       run: cargo test --features cli --verbose
-    - name: Build release binary
+    - name: Run tests (with test-support)
       working-directory: rust
-      run: cargo build --features cli --release
+      run: cargo test --features cli,test-support --verbose
+    - name: Build release binary (with test-support for parity tests)
+      working-directory: rust
+      run: cargo build --features cli,test-support --release
     - name: Upload Rust binary
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:

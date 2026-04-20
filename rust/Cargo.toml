@@ -20,6 +20,9 @@ rattler = []
 # Signal that reqwest is present in the consuming workspace.
 # build.rs extracts the version from Cargo.lock; no dependency added.
 reqwest = []
+# Enable test-only overrides (e.g. ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT).
+# Must NEVER be enabled in released binaries.
+test-support = []
 
 [[bin]]
 name = "anaconda-anon-usage"
