@@ -99,7 +99,11 @@ def _search_path():
     Deterministic path construction — does not import conda.
     Identical logic in the Rust anaconda-anon-usage crate.
     """
-    if sys.platform == "win32":
+    # Test-only: override system paths for isolation (not a public API)
+    test_root = environ.get("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT")
+    if test_root:
+        dirs = [test_root]
+    elif sys.platform == "win32":
         dirs = ["C:/ProgramData/conda"]
     else:
         dirs = ["/etc/conda", "/var/lib/conda"]

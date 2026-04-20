@@ -161,13 +161,20 @@ fn env_path_grandparent(var: &str) -> Option<PathBuf> {
 fn compute_search_path() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
 
-    #[cfg(windows)]
-    dirs.push("C:/ProgramData/conda".into());
+    // Test-only: override system paths for isolation (not a public API)
+    if let Ok(test_root) = std::env::var("ANACONDA_ANON_USAGE_TEST_SYSTEM_ROOT") {
+        if !test_root.is_empty() {
+            dirs.push(PathBuf::from(test_root));
+        }
+    } else {
+        #[cfg(windows)]
+        dirs.push("C:/ProgramData/conda".into());
 
-    #[cfg(not(windows))]
-    {
-        dirs.push("/etc/conda".into());
-        dirs.push("/var/lib/conda".into());
+        #[cfg(not(windows))]
+        {
+            dirs.push("/etc/conda".into());
+            dirs.push("/var/lib/conda".into());
+        }
     }
 
     let conda_root = conda_root();
