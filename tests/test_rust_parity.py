@@ -397,17 +397,54 @@ class TestSystemTokensParity:
         ],
     )
     def test_env_var_slash_separated_tokens(self, env_var, prefix, py_func):
-        """Slash-separated tokens in env var should produce multiple entries."""
+        """Slash-separated tokens in env var should behave identically in both."""
         tmpdir = _isolated_home()
         try:
             env = {**_home_env(tmpdir), env_var: "token-alpha/token-beta"}
 
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
             rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
             rs_list = rs_tokens.get(prefix, [])
 
-            assert (
-                "token-alpha" in rs_list and "token-beta" in rs_list
-            ), f"Rust didn't split slash tokens: {rs_list}"
+            assert py_list == rs_list, (
+                f"Python and Rust diverge on slash-separated input:\n"
+                f"  Python: {py_list}\n"
+                f"  Rust:   {rs_list}"
+            )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @pytest.mark.parametrize(
+        "env_var,prefix,py_func",
+        [
+            ("ANACONDA_ANON_USAGE_ORG_TOKEN", "o", "organization_tokens()"),
+            ("ANACONDA_ANON_USAGE_MACHINE_TOKEN", "m", "machine_tokens()"),
+            ("ANACONDA_ANON_USAGE_INSTALLER_TOKEN", "i", "installer_tokens()"),
+        ],
+    )
+    def test_env_var_with_invalid_char_rejected_identically(self, env_var, prefix, py_func):
+        """A token with invalid chars should be rejected by both implementations
+        in the same way — not discarded by one and salvaged-by-splitting by the other."""
+        tmpdir = _isolated_home()
+        try:
+            # '/' is not in VALID_TOKEN_RE's char class
+            env = {**_home_env(tmpdir), env_var: "valid-part/also-valid-part"}
+
+            py_tokens = _python_token_fresh(py_func, env_override=env)
+            py_list = [t for t in py_tokens.split("\n") if t]
+
+            rs_tokens = _parse_tokens(_run_rust_tokens(env_override=env))
+            rs_list = rs_tokens.get(prefix, [])
+
+            # If both implementations consider '/' invalid, both should return [].
+            # If Rust "helpfully" splits on '/', it will return the two halves.
+            assert py_list == rs_list, (
+                f"Divergence on slash handling:\n"
+                f"  Python (rejects '/' wholesale): {py_list}\n"
+                f"  Rust (splits on '/'):           {rs_list}"
+            )
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
