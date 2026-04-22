@@ -302,12 +302,18 @@ fn session_token() -> Result<String> {
     cached_string("session_token", || random_token("session"))
 }
 
-/// Resolve the environment prefix: explicit arg > global > CONDA_PREFIX > None.
+/// Resolve the environment prefix: explicit arg > global > `$CONDA_PREFIX` > None.
+///
+/// An empty string at any layer is treated as absent, matching Python's
+/// `environment_token("")` behavior (fixed in #224, Bug 9). Without this,
+/// a caller-supplied `Config::env_prefix = Some("")` or CLI `--env-prefix ""`
+/// would resolve `etc/aau_token` against the process cwd — the same relative
+/// path bug the Python side was hardened against.
 fn resolve_prefix(prefix: Option<&str>) -> Option<String> {
-    if let Some(p) = prefix {
+    if let Some(p) = prefix.filter(|s| !s.is_empty()) {
         return Some(p.to_string());
     }
-    if let Some(p) = crate::get_env_prefix() {
+    if let Some(p) = crate::get_env_prefix().filter(|s| !s.is_empty()) {
         return Some(p);
     }
     std::env::var("CONDA_PREFIX").ok().filter(|s| !s.is_empty())
