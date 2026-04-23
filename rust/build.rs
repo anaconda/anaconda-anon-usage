@@ -80,15 +80,21 @@ fn rustc_version() -> Option<String> {
     stdout.split_whitespace().nth(1).map(|s| s.to_string())
 }
 
-/// Extract a dependency's resolved version from the workspace Cargo.lock.
+/// Extract a dependency's resolved version from the consumer's Cargo.lock.
 ///
-/// Walks up from CARGO_MANIFEST_DIR to find the nearest Cargo.lock (handles
-/// both standalone crates and workspace members). If multiple versions of
-/// the same crate exist (e.g., reqwest 0.11 and 0.12 via transitive deps),
-/// returns the highest version.
+/// Walks up from OUT_DIR — which cargo places inside the consumer's `target/`
+/// directory regardless of whether this crate is a local path dep, a workspace
+/// member, or a registry dep — to find the nearest Cargo.lock. CARGO_MANIFEST_DIR
+/// is unsuitable because for a registry dep it points into the cargo cache
+/// (~/.cargo/registry/...) which has no Cargo.lock above it.
+///
+/// If multiple versions of the same crate exist (e.g., reqwest 0.11 and 0.12
+/// via transitive deps), returns the highest version. Consumers that need to
+/// pin the reported version to their direct dep can set `Config::rattler_version`
+/// or `Config::reqwest_version` explicitly at runtime.
 fn extract_lock_version(dep_name: &str) -> Option<String> {
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let lock_path = find_cargo_lock(&manifest_dir)?;
+    let out_dir = std::path::PathBuf::from(std::env::var_os("OUT_DIR")?);
+    let lock_path = find_cargo_lock(&out_dir)?;
     println!("cargo:rerun-if-changed={}", lock_path.display());
     let lockfile = cargo_lock::Lockfile::load(&lock_path).ok()?;
     lockfile
