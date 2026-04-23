@@ -29,47 +29,76 @@ static SYSTEM_TOKEN_CACHE: LazyLock<Mutex<SystemTokenMap>> =
 /// Cached search paths — filesystem checks done once per process.
 static SEARCH_PATH: LazyLock<Vec<PathBuf>> = LazyLock::new(compute_search_path);
 
+/// Memoize a fallible string computation.
+///
+/// The producer `f` runs **without** the cache lock held, so slow I/O
+/// (e.g. `saved_token`) never blocks other token lookups. Losers of a race
+/// compute but discard their value; the first successful insertion wins,
+/// matching the existing "first in wins" cache semantics. Errors are never
+/// cached — a subsequent call retries.
 fn cached_string<F>(key: &str, f: F) -> Result<String>
 where
     F: FnOnce() -> Result<String>,
 {
-    let mut cache = TOKEN_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(value) = cache.get(key) {
-        return Ok(value.clone());
+    if let Some(hit) = TOKEN_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(key)
+        .cloned()
+    {
+        return Ok(hit);
     }
     let value = f()?;
-    cache.insert(key.to_string(), value.clone());
-    Ok(value)
+    let mut cache = TOKEN_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    Ok(cache.entry(key.to_string()).or_insert(value).clone())
 }
 
+/// Memoize a `None`-able string computation.
+///
+/// As with [`cached_string`], the producer runs without the lock held.
+/// An empty string in the underlying map is the "cached None" sentinel.
 fn cached_option<F>(key: &str, f: F) -> Option<String>
 where
     F: FnOnce() -> Option<String>,
 {
-    let mut cache = TOKEN_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(value) = cache.get(key) {
-        return if value.is_empty() {
-            None
-        } else {
-            Some(value.clone())
-        };
+    if let Some(hit) = TOKEN_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(key)
+        .cloned()
+    {
+        return if hit.is_empty() { None } else { Some(hit) };
     }
     let value = f();
-    cache.insert(key.to_string(), value.clone().unwrap_or_default());
-    value
+    let mut cache = TOKEN_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let stored = cache
+        .entry(key.to_string())
+        .or_insert_with(|| value.clone().unwrap_or_default());
+    if stored.is_empty() {
+        None
+    } else {
+        Some(stored.clone())
+    }
 }
 
+/// Memoize a multi-valued system-token lookup.
+///
+/// As with [`cached_string`], the producer runs without the lock held.
 fn cached_system_tokens<F>(key: &str, f: F) -> Vec<(String, String)>
 where
     F: FnOnce() -> Vec<(String, String)>,
 {
-    let mut cache = SYSTEM_TOKEN_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(value) = cache.get(key) {
-        return value.clone();
+    if let Some(hit) = SYSTEM_TOKEN_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(key)
+        .cloned()
+    {
+        return hit;
     }
     let value = f();
-    cache.insert(key.to_string(), value.clone());
-    value
+    let mut cache = SYSTEM_TOKEN_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    cache.entry(key.to_string()).or_insert(value).clone()
 }
 
 /// Conda configuration search paths (same locations conda checks for .condarc).
@@ -557,7 +586,13 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
     if !environment.is_empty() {
         let env_path = prefix_str
             .as_deref()
-            .map(|p| format!("{}/etc/aau_token", p))
+            .map(|p| {
+                PathBuf::from(p)
+                    .join("etc")
+                    .join("aau_token")
+                    .display()
+                    .to_string()
+            })
             .unwrap_or_default();
         entries.push(TokenEntry {
             prefix: "e".into(),

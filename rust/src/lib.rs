@@ -213,8 +213,15 @@ pub fn token_details(config: &Config) -> Vec<TokenEntry> {
 }
 
 /// Generate a random 22-character URL-safe base64 token.
+///
+/// # Panics
+///
+/// Panics if the OS random number generator is unavailable. OS entropy
+/// failures are catastrophic and essentially never recoverable; returning
+/// an empty string here would silently produce an invalid token downstream.
+#[must_use]
 pub fn random_token() -> String {
-    utils::random_token("cli").unwrap_or_default()
+    utils::random_token("cli").expect("OS random number generator is unavailable")
 }
 
 /// Return the system token search path.
@@ -240,6 +247,12 @@ pub fn finalize_deferred_writes() -> std::result::Result<(), Error> {
 /// // ... rest of program ...
 /// // deferred writes flushed when _aau is dropped
 /// ```
+///
+/// The `#[must_use]` attribute ensures the compiler warns if the guard is
+/// dropped immediately (e.g. `anaconda_anon_usage::init();` with no binding),
+/// which would defeat the entire purpose of the guard.
+#[must_use = "dropping the FlushGuard immediately flushes deferred writes \
+              and ends AAU lifetime; bind it to a local (e.g. `let _aau = init();`)"]
 pub struct FlushGuard;
 
 impl Drop for FlushGuard {
@@ -249,6 +262,8 @@ impl Drop for FlushGuard {
 }
 
 /// Initialize AAU and return a guard that flushes deferred writes on drop.
+#[must_use = "the returned FlushGuard flushes deferred writes when dropped; \
+              bind it for the lifetime of the process (e.g. `let _aau = init();`)"]
 pub fn init() -> FlushGuard {
     FlushGuard
 }
