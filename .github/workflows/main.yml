@@ -9,17 +9,6 @@ on:
     branches:
       - main
       - feat/rust-crate
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Pre-release version to publish (e.g. 0.8.0-pre.9). Must contain a hyphen.'
-        required: true
-        type: string
-      dry_run:
-        description: 'Dry-run only (exercise OIDC + packaging, skip actual upload)'
-        required: false
-        type: boolean
-        default: true
 
 concurrency:
   # Concurrency group that uses the workflow name and PR number if available
@@ -268,45 +257,23 @@ jobs:
         [[ "$GITHUB_REF" =~ ^refs/tags/ ]] || export LABEL="--label dev"
         packages=$(ls -1 conda-bld/*/*.{tar.bz2,conda} 2>/dev/null || :)
         anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL $packages --force
-    - name: Validate workflow_dispatch version is a pre-release
-      if: github.event_name == 'workflow_dispatch'
-      run: |
-        VERSION="${{ inputs.version }}"
-        if [[ "$VERSION" != *-* ]]; then
-          echo "::error::workflow_dispatch version '$VERSION' must be a pre-release (contain a hyphen, e.g. 0.8.0-pre.9). Stable releases go through tag push only."
-          exit 1
-        fi
-        echo "Validated pre-release version: $VERSION"
     - name: Install Rust toolchain
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || github.event_name == 'workflow_dispatch'
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       uses: dtolnay/rust-toolchain@stable
-    - name: Set crate version
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || github.event_name == 'workflow_dispatch'
+    - name: Set crate version from git tag
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       working-directory: rust
       run: |
-        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-          VERSION="${{ inputs.version }}"
-        else
-          VERSION="${{ github.ref_name }}"
-        fi
+        VERSION="${{ github.ref_name }}"
         echo "Setting crate version to $VERSION"
         sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
         cat Cargo.toml | head -6
     - name: Authenticate with crates.io (OIDC)
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || github.event_name == 'workflow_dispatch'
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       id: crates-io-auth
       uses: rust-lang/crates-io-auth-action@v1
-    - name: Publish crate to crates.io (dry-run)
-      if: github.event_name == 'workflow_dispatch' && inputs.dry_run
-      working-directory: rust
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
-      run: |
-        # Exercises the full OIDC + packaging path without uploading.
-        # No version is burned on crates.io.
-        cargo publish --allow-dirty --dry-run
     - name: Publish crate to crates.io
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       working-directory: rust
       env:
         CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
