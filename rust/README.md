@@ -343,6 +343,14 @@ rust/
   tokens are prepended before `aau/` and do not affect parity with Python
   for the core AAU token types.
 
+- **Legacy token file format**: Older Python installs (pre-0.8) wrote the
+  `aau_token` file as a single line `"{token} {host_id}"` (space-separated).
+  The Rust crate does not parse that format — it expects a bare token on
+  the first line and a separate `aau_token_host` file for the host ID.
+  In practice this matters only on upgrade paths where a machine still
+  carries a pre-0.8 token file; in that case Rust will reject the malformed
+  token and regenerate, producing a new `c/` token value on first use.
+
 - **Deferred write lifecycle**: The Python package registers
   `_final_attempt()` via `atexit.register(...)` at import time, so any
   deferred token write is flushed automatically when the interpreter exits.

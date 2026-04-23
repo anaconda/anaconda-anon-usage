@@ -826,6 +826,53 @@ class TestBugFixParity:
             f"stdout={result.stdout!r} stderr={result.stderr!r}"
         )
 
+    # Rust's resolve_prefix previously passed an empty explicit prefix through
+    # as Some(""), so environment_token would compute `"".join("etc",
+    # "aau_token")` → the relative path `etc/aau_token`. Python's #224 Bug 9
+    # commit described the target behavior as "matching Rust's resolve_prefix()
+    # which treats an empty CONDA_PREFIX as absent" — but that filter only
+    # applied to the CONDA_PREFIX fallback branch, not to an explicit Some("")
+    # from Config::env_prefix / set_env_prefix / --env-prefix "". The fix
+    # applies the same empty-string filter to all three resolution layers.
+    def test_rust_skips_environment_token_when_prefix_empty(self):
+        """Rust --env-prefix '' must emit no e/ token (not a cwd-relative read).
+
+        Reproduction: a token file at `<cwd>/etc/aau_token` that *would* pass
+        validation. Before the fix, Rust would read it and emit an e/ token
+        sourced from the literal path "/etc/aau_token". After the fix, the
+        empty prefix is treated as absent and no e/ token is emitted.
+
+        FIXED in:
+          - rust/src/tokens.rs :: resolve_prefix (filter Some("") on all layers)
+        """
+        tmpdir = tempfile.mkdtemp()
+        try:
+            etc_dir = Path(tmpdir) / "etc"
+            etc_dir.mkdir()
+            # Any valid-looking token; the bug is that Rust reads the file at
+            # all, not what it contains.
+            (etc_dir / "aau_token").write_text("cwdrelative-token-abcdefg\n")
+
+            # Run Rust from inside tmpdir so a cwd-relative read would find
+            # the token file. The empty --env-prefix must take precedence
+            # over both the global setter (unset here) and $CONDA_PREFIX
+            # (explicitly cleared via the subprocess allowlist).
+            result = subprocess.run(
+                [RUST_BIN, "--env-prefix", ""],
+                capture_output=True,
+                text=True,
+                env=_subprocess_env(_home_env(tmpdir)),
+                cwd=tmpdir,
+            )
+            assert result.returncode == 0, f"Rust binary failed: {result.stderr}"
+            rs_tokens = _parse_tokens(result.stdout.strip())
+            assert "e" not in rs_tokens, (
+                "Rust emitted an e/ token from an empty --env-prefix — likely "
+                f"read cwd-relative etc/aau_token: {rs_tokens.get('e')}"
+            )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
 
 class TestFileFormatEdgeCases:
     """File-format edge cases for _read_file / read_file on both sides."""
