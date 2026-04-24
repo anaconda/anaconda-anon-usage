@@ -17,7 +17,7 @@ import platform
 import struct
 import sys
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 from urllib.parse import parse_qs, unquote
 
 INSTALLER_TOKEN_FILE_NAME = ".installer_token"
@@ -267,7 +267,7 @@ def read_installer_attribution_pkg(filepath: Path) -> Optional[str]:
 # =============================================================================
 
 # Map platform to reader function
-PLATFORM_READERS: dict[str, Callable[[Path], Optional[str]]] = {
+PLATFORM_READERS: Dict[str, Callable[[Path], Optional[str]]] = {
     "windows": read_installer_attribution_windows,
     "linux": read_installer_attribution_sh,
     "darwin": read_installer_attribution_sh,
