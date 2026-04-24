@@ -52,70 +52,72 @@ def read_installer_attribution_windows(filepath: Path) -> str:
         When the PE format is unknown.
 
     """
-    with (
-        filepath.open(mode="rb") as file,
-        mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as mapped,
-    ):
-        # Get the location of the PE header and the optional header
-        if len(mapped) < 0x40:
-            raise RuntimeError("File is not a valid PE file: PE header missing.")
+    with filepath.open(mode="rb") as file:
+        mapped = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ)
+        try:
+            # Get the location of the PE header and the optional header
+            if len(mapped) < 0x40:
+                raise RuntimeError("File is not a valid PE file: PE header missing.")
 
-        pe_header_offset = struct.unpack("<I", mapped[0x3C:0x40])[0]
+            pe_header_offset = struct.unpack("<I", mapped[0x3C:0x40])[0]
 
-        # Validate PE signature
-        if mapped[pe_header_offset : pe_header_offset + 4] != b"PE\x00\x00":
-            raise RuntimeError("File is not a valid PE file: invalid PE signature.")
+            # Validate PE signature
+            if mapped[pe_header_offset : pe_header_offset + 4] != b"PE\x00\x00":
+                raise RuntimeError("File is not a valid PE file: invalid PE signature.")
 
-        optional_header_offset = pe_header_offset + 24
+            optional_header_offset = pe_header_offset + 24
 
-        # Look up the magic number in the optional header,
-        # so we know if we have a 32 or 64-bit executable.
-        pe_magic_number = struct.unpack(
-            "<H", mapped[optional_header_offset : optional_header_offset + 2]
-        )[0]
-        if pe_magic_number == 0x10B:
-            # 32-bit
-            cert_dir_entry_offset = optional_header_offset + 128
-        elif pe_magic_number == 0x20B:
-            # 64-bit. Certain header fields are wider.
-            cert_dir_entry_offset = optional_header_offset + 144
-        else:
-            raise ValueError(f"Unknown PE format. Magic number: {pe_magic_number:X}")
+            # Look up the magic number in the optional header,
+            # so we know if we have a 32 or 64-bit executable.
+            pe_magic_number = struct.unpack(
+                "<H", mapped[optional_header_offset : optional_header_offset + 2]
+            )[0]
+            if pe_magic_number == 0x10B:
+                # 32-bit
+                cert_dir_entry_offset = optional_header_offset + 128
+            elif pe_magic_number == 0x20B:
+                # 64-bit. Certain header fields are wider.
+                cert_dir_entry_offset = optional_header_offset + 144
+            else:
+                raise ValueError(
+                    f"Unknown PE format. Magic number: {pe_magic_number:X}"
+                )
 
-        # The certificate table offset and length give us the valid range
-        # to search through for our attribution data.
-        cert_table_offset = struct.unpack(
-            "<I", mapped[cert_dir_entry_offset : cert_dir_entry_offset + 4]
-        )[0]
-        cert_table_size = struct.unpack(
-            "<I", mapped[cert_dir_entry_offset + 4 : cert_dir_entry_offset + 8]
-        )[0]
+            # The certificate table offset and length give us the valid range
+            # to search through for our attribution data.
+            cert_table_offset = struct.unpack(
+                "<I", mapped[cert_dir_entry_offset : cert_dir_entry_offset + 4]
+            )[0]
+            cert_table_size = struct.unpack(
+                "<I", mapped[cert_dir_entry_offset + 4 : cert_dir_entry_offset + 8]
+            )[0]
 
-        if cert_table_offset == 0 or cert_table_size == 0:
-            raise RuntimeError("File is not signed.")
+            if cert_table_offset == 0 or cert_table_size == 0:
+                raise RuntimeError("File is not signed.")
 
-        tag = b"ANACONDA_ATTR"
-        tag_index = mapped.find(
-            tag, cert_table_offset, cert_table_offset + cert_table_size
-        )
-        if tag_index == -1:
-            raise RuntimeError("Could not find tag `ANACONDA_ATTR` in signature.")
+            tag = b"ANACONDA_ATTR"
+            tag_index = mapped.find(
+                tag, cert_table_offset, cert_table_offset + cert_table_size
+            )
+            if tag_index == -1:
+                raise RuntimeError("Could not find tag `ANACONDA_ATTR` in signature.")
 
-        # Read the data after the tag
-        data_start = tag_index + len(tag)
-        # Find the end of the reserved space (1024 bytes from tag start)
-        max_data_end = tag_index + 1024
-        data_end = min(cert_table_offset + cert_table_size, max_data_end)
+            # Read the data after the tag
+            data_start = tag_index + len(tag)
+            # Find the end of the reserved space (1024 bytes from tag start)
+            max_data_end = tag_index + 1024
+            data_end = min(cert_table_offset + cert_table_size, max_data_end)
 
-        # Extract the raw data
-        raw_data = mapped[data_start:data_end]
-        mapped.close()
+            # Extract the raw data
+            raw_data = mapped[data_start:data_end]
 
-        # Find the first null byte to determine actual data length
-        null_index = raw_data.find(b"\x00")
-        if null_index != -1:
-            raw_data = raw_data[:null_index]
-        return raw_data.decode("utf-8")
+            # Find the first null byte to determine actual data length
+            null_index = raw_data.find(b"\x00")
+            if null_index != -1:
+                raw_data = raw_data[:null_index]
+            return raw_data.decode("utf-8")
+        finally:
+            mapped.close()
 
 
 # =============================================================================
