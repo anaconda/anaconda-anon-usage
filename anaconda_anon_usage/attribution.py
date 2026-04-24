@@ -1,23 +1,34 @@
 """Read attribution data from installer and write it into a token file.
 
 This module provides functions for reading attribution data embedded in
-signed Windows PE installer files (e.g., .exe installers). The attribution
-data is stored in the certificate table with the `ANACONDA_ATTR` tag.
+Anaconda installers across all platforms:
+
+- Windows (.exe): Attribution stored in PE certificate table after `ANACONDA_ATTR` tag
+- Linux/macOS (.sh): Attribution exported as `ANACONDA_ATTR` environment variable
+- macOS (.pkg): Attribution appended as trailing data after xar archive
 
 This module is designed to be called during the post-install step of
 Anaconda installers to extract and save the installer token.
 """
 
 import mmap
+import os
+import platform
 import struct
 import sys
 from pathlib import Path
+from typing import Callable, Optional
 from urllib.parse import parse_qs, unquote
 
 INSTALLER_TOKEN_FILE_NAME = ".installer_token"
 
 
-def read_installer_attribution(filepath: Path) -> str:
+# =============================================================================
+# Windows PE (.exe) reader - reads from certificate table padding
+# =============================================================================
+
+
+def read_installer_attribution_windows(filepath: Path) -> str:
     """Read attribution data from a signed PE file.
 
     This function looks for the `ANACONDA_ATTR` tag in the certificate table
@@ -107,6 +118,216 @@ def read_installer_attribution(filepath: Path) -> str:
         return raw_data.decode("utf-8")
 
 
+# =============================================================================
+# Shell script (.sh) reader - reads from environment variable or script parsing
+# =============================================================================
+
+
+def read_installer_attribution_from_env() -> Optional[str]:
+    """Read attribution data from the ANACONDA_ATTR environment variable.
+
+    This is the primary method for post-install scripts to access attribution data,
+    as the installer exports this variable before running post-install scripts.
+
+    Returns
+    -------
+    Optional[str]
+        Attribution data string if found, None otherwise.
+
+    """
+    return os.environ.get("ANACONDA_ATTR")
+
+
+def read_installer_attribution_from_sh_file(filepath: Path) -> Optional[str]:
+    """Read attribution data from a shell script file.
+
+    Looks for an export statement that sets ANACONDA_ATTR environment variable.
+    Format: export ANACONDA_ATTR='<data>'
+
+    Parameters
+    ----------
+    filepath: Path
+        Path to the shell script installer
+
+    Returns
+    -------
+    Optional[str]
+        Attribution data string if found, None otherwise.
+
+    """
+    try:
+        with filepath.open("r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.strip().startswith("export ANACONDA_ATTR="):
+                    # Extract the value between quotes (single quotes expected)
+                    if "'" in line:
+                        parts = line.split("'")
+                        if len(parts) >= 2:
+                            data = parts[1].strip()
+                            if data:
+                                return data
+                    elif '"' in line:
+                        parts = line.split('"')
+                        if len(parts) >= 2:
+                            data = parts[1].strip()
+                            if data:
+                                return data
+    except Exception:
+        pass
+    return None
+
+
+def read_installer_attribution_sh(filepath: Path) -> Optional[str]:
+    """Read attribution data from a shell script installer.
+
+    First tries to read from ANACONDA_ATTR environment variable (primary method),
+    then falls back to parsing the shell script file.
+
+    Parameters
+    ----------
+    filepath: Path
+        Path to the shell script installer
+
+    Returns
+    -------
+    Optional[str]
+        Attribution data string if found, None otherwise.
+
+    """
+    attribution_data = read_installer_attribution_from_env()
+    if not attribution_data:
+        attribution_data = read_installer_attribution_from_sh_file(filepath)
+    return attribution_data
+
+
+# =============================================================================
+# macOS .pkg reader - reads from trailing data after xar archive
+# =============================================================================
+
+
+def read_installer_attribution_pkg(filepath: Path) -> Optional[str]:
+    """Read attribution data from a .pkg installer's trailing data.
+
+    The attribution is stored as "ANACONDA_ATTR" marker followed by the data,
+    appended after the xar archive. This does not affect code signing,
+    notarization, or Gatekeeper validation.
+
+    Parameters
+    ----------
+    filepath: Path
+        Path to the .pkg installer
+
+    Returns
+    -------
+    Optional[str]
+        Attribution data string if found, None otherwise.
+
+    """
+    try:
+        with filepath.open("rb") as file:
+            # Check xar magic
+            magic = file.read(4)
+            if magic != b"xar!":
+                return None
+
+            # Read the entire file to search for marker
+            file.seek(0)
+            data = file.read()
+
+            tag = b"ANACONDA_ATTR"
+            # Search from the end since attribution is in trailing data
+            idx = data.rfind(tag)
+            if idx == -1:
+                return None
+
+            # Extract everything after the marker
+            data_start = idx + len(tag)
+            if data_start >= len(data):
+                return None
+
+            attribution = data[data_start:]
+
+            # Convert to string
+            try:
+                return attribution.decode("utf-8")
+            except UnicodeDecodeError:
+                try:
+                    return attribution.decode("latin-1")
+                except UnicodeDecodeError:
+                    return None
+
+    except OSError:
+        return None
+
+
+# =============================================================================
+# Platform dispatcher
+# =============================================================================
+
+# Map platform to reader function
+PLATFORM_READERS: dict[str, Callable[[Path], Optional[str]]] = {
+    "windows": read_installer_attribution_windows,
+    "linux": read_installer_attribution_sh,
+    "darwin": read_installer_attribution_sh,
+}
+
+
+def read_installer_attribution(
+    filepath: Path, platform_name: Optional[str] = None
+) -> Optional[str]:
+    """Read attribution data from an installer file.
+
+    Automatically detects the platform and file type to use the appropriate
+    reader. For .sh files on any platform, uses the shell script reader.
+    For .pkg files, uses the pkg reader. For .exe files, uses the Windows
+    PE reader.
+
+    Parameters
+    ----------
+    filepath: Path
+        Path to the installer file.
+    platform_name: Optional[str]
+        Override platform detection. Options: 'windows', 'darwin', 'linux'.
+        If not provided, uses the current platform.
+
+    Returns
+    -------
+    Optional[str]
+        Attribution data as string, or None if not found.
+
+    """
+    if not filepath.exists():
+        return None
+
+    # Determine file type from extension
+    suffix = filepath.suffix.lower()
+
+    # .pkg files have their own reader regardless of platform
+    if suffix == ".pkg":
+        return read_installer_attribution_pkg(filepath)
+
+    # .sh files use shell script reader regardless of platform
+    if suffix == ".sh":
+        return read_installer_attribution_sh(filepath)
+
+    # For other files, use platform-specific reader
+    system_platform = platform_name or platform.system().lower()
+
+    reader = PLATFORM_READERS.get(system_platform)
+    if reader is None:
+        return None
+
+    try:
+        return reader(filepath)
+    except Exception:
+        return None
+
+
+# =============================================================================
+# Parsing and saving
+# =============================================================================
+
+
 def parse_installer_attribution(attribution_data: str) -> dict:
     """Parse URL-encoded attribution data into a dictionary.
 
@@ -134,6 +355,7 @@ def parse_installer_attribution(attribution_data: str) -> dict:
 def save_installer_attribution(
     installer_file: Path,
     installer_token_out_file: Path,
+    platform_name: Optional[str] = None,
 ) -> bool:
     """Save installer attribution data to local .installer_token file.
 
@@ -143,6 +365,8 @@ def save_installer_attribution(
         Path to the installer file to read attribution from.
     installer_token_out_file: Path
         The path to save the .installer_token file.
+    platform_name: Optional[str]
+        Override platform detection. Options: 'windows', 'darwin', 'linux'.
 
     Returns
     -------
@@ -150,7 +374,7 @@ def save_installer_attribution(
         True if the token was saved successfully, False otherwise.
 
     """
-    attribution_data = read_installer_attribution(installer_file)
+    attribution_data = read_installer_attribution(installer_file, platform_name)
     # Do not write token if attribution data is empty
     if not attribution_data:
         return False
@@ -161,6 +385,11 @@ def save_installer_attribution(
     installer_token_out_file.parent.mkdir(exist_ok=True, parents=True)
     installer_token_out_file.write_text(installer_token)
     return True
+
+
+# =============================================================================
+# CLI
+# =============================================================================
 
 
 def _cli():
@@ -182,6 +411,11 @@ def _cli():
         help="Path to the directory where the installer token will be saved",
         required=True,
     )
+    parser.add_argument(
+        "--platform",
+        choices=["windows", "darwin", "linux"],
+        help="Override platform detection",
+    )
     args = parser.parse_args()
     installer_file = Path(args.installer_file)
     if not installer_file.is_file():
@@ -189,7 +423,7 @@ def _cli():
         sys.exit(1)
     token_file = Path(args.prefix) / INSTALLER_TOKEN_FILE_NAME
     try:
-        saved = save_installer_attribution(installer_file, token_file)
+        saved = save_installer_attribution(installer_file, token_file, args.platform)
         if saved:
             print(f"Installer token saved to {token_file}")
         else:
