@@ -96,7 +96,7 @@ fn main() {
         ..Default::default()
     };
 
-    // Full token string (for User-Agent headers)
+    // Full token string (for User-Agent headers at Anaconda-operated domains)
     let ua = token_string(&config);
 
     // Per-token details (for diagnostics)
@@ -105,6 +105,39 @@ fn main() {
     }
 }
 ```
+
+### Non-identifying UA for non-Anaconda domains
+
+The full `token_string` contains identity-bearing tokens (`c/`, `s/`, `e/`,
+`a/`, `i/`, `o/`, `m/`) that should only be sent to Anaconda-operated
+domains. For requests to PyPI, GitHub, or other third-party hosts, use
+`platform_ua_string` instead — it contains only the non-identifying
+portion: host-tool prefix, platform info, and rattler/reqwest versions.
+
+```rust
+use anaconda_anon_usage::{Config, PlatformUaConfig, platform_ua_string, token_string};
+
+let config = Config {
+    prefix: Some("ana/0.1.0".into()),
+    platform: true,
+    ..Default::default()
+};
+
+// Safe to send to any domain:
+let non_identifying = platform_ua_string(&(&config).into());
+// e.g. "ana/0.1.0 Darwin/25.2.0 OSX/26.2 rustc/1.82.0"
+
+// Send to Anaconda-operated domains only:
+let full = token_string(&config);
+// e.g. "ana/0.1.0 Darwin/25.2.0 OSX/26.2 rustc/1.82.0 aau/0.8.0 c/... s/..."
+```
+
+`platform_ua_string`'s result is cached per-`PlatformUaConfig` for the
+process lifetime, so repeated calls during HTTP client construction are
+effectively free.
+
+`identity_tokens(&config)` is available for callers that need just the
+identity portion separately (e.g., middleware that composes its own UA).
 
 ### Platform and prefix tokens
 
@@ -306,7 +339,7 @@ rust/
   Cargo.toml
   build.rs          # Version from git describe; rustc/rattler/reqwest version extraction
   src/
-    lib.rs          # Public API: Config, token_string(), token_details(), init(), FlushGuard, set_env_prefix(), get_env_prefix()
+    lib.rs          # Public API: Config, PlatformUaConfig, token_string(), platform_ua_string(), identity_tokens(), token_details(), init(), FlushGuard, set_env_prefix(), get_env_prefix()
     tokens.rs       # Token collection, JWT parsing, search paths, caching
     utils.rs        # File I/O, random_token(), saved_token(), deferred writes
     platform.rs     # Platform detection: kernel, OS distro, libc, rustc version
