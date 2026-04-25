@@ -7,6 +7,18 @@
 //!
 //! `[prefix...] [platform...] aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [o/{org}] [m/{machine}] [i/{installer}]`
 //!
+//! The string has two distinct regions, exposed as separate APIs:
+//!
+//! - **Platform UA** ([`platform_ua_string`]): host-tool prefix, platform
+//!   info, rattler/reqwest versions. Non-identifying; safe to send to any
+//!   domain.
+//! - **Identity tokens** ([`identity_tokens`]): `aau/ c/ s/ e/ a/ i/ o/ m/`.
+//!   Only appropriate for Anaconda-operated domains where the consumer has
+//!   opted in to telemetry.
+//!
+//! [`token_string`] is the concatenation of both, for callers that want the
+//! full User-Agent at an Anaconda-operated domain.
+//!
 //! # Usage
 //!
 //! ```no_run
@@ -20,9 +32,12 @@
 //!     ..Default::default()
 //! };
 //!
-//! // Full token string (for User-Agent headers)
+//! // Full token string (for User-Agent headers at Anaconda-operated domains)
 //! // e.g., "ana/0.1.0 rattler/0.40.5 Darwin/25.2.0 OSX/26.2 aau/0.7.6 c/... s/..."
 //! let tokens = token_string(&config);
+//!
+//! // Non-identifying platform UA (safe for any domain)
+//! let platform_ua = anaconda_anon_usage::platform_ua_string(&(&config).into());
 //!
 //! // Per-token details (for diagnostics)
 //! for entry in token_details(&config) {
@@ -106,6 +121,57 @@ impl Default for Config {
     }
 }
 
+/// Inputs for the non-identifying portion of the User-Agent.
+///
+/// All fields are either compile-time-constant or first-boot-static, so a
+/// [`PlatformUaConfig`] is safe to hash and use as a cache key.
+/// Derived from [`Config`] via `From`/`Into`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PlatformUaConfig {
+    /// Host-tool prefix (e.g., `"ana/0.1.0"`). Whitespace-delimited words
+    /// become individual entries.
+    pub prefix: Option<String>,
+
+    /// If `true`, platform tokens (e.g., `Darwin/25.2.0 OSX/26.2 rustc/1.82.0`)
+    /// are included. See [`Config::platform`] for the default.
+    pub platform: bool,
+
+    /// Rattler version override. Same semantics as [`Config::rattler_version`].
+    pub rattler_version: Option<String>,
+
+    /// Reqwest version override. Same semantics as [`Config::reqwest_version`].
+    pub reqwest_version: Option<String>,
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for PlatformUaConfig {
+    fn default() -> Self {
+        Self {
+            prefix: None,
+            platform: cfg!(feature = "platform"),
+            rattler_version: None,
+            reqwest_version: None,
+        }
+    }
+}
+
+impl From<&Config> for PlatformUaConfig {
+    fn from(c: &Config) -> Self {
+        Self {
+            prefix: c.prefix.clone(),
+            platform: c.platform,
+            rattler_version: c.rattler_version.clone(),
+            reqwest_version: c.reqwest_version.clone(),
+        }
+    }
+}
+
+impl From<Config> for PlatformUaConfig {
+    fn from(c: Config) -> Self {
+        (&c).into()
+    }
+}
+
 /// A collected token with its provenance (where it came from).
 pub struct TokenEntry {
     /// Token name/prefix (e.g., `"c"`, `"aau"`, `"Darwin"`, `"ana"`).
@@ -177,16 +243,52 @@ pub(crate) struct DeferredWrite {
     pub label: String,
 }
 
-/// Build the full token string.
+/// Build the non-identifying portion of the User-Agent.
 ///
-/// Format: `[prefix...] [reqwest/{ver}] [platform...] [rattler/{ver}] aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [o/{org}] [m/{machine}] [i/{installer}]`
-pub fn token_string(config: &Config) -> String {
-    match tokens::token_string(config) {
+/// Format: `[prefix...] [reqwest/{ver}] [platform...] [rattler/{ver}]`
+///
+/// Safe to send to any domain — contains only the host-tool prefix,
+/// platform information, and crate versions. None of these are
+/// user-identifying; all are compile-time-constant or first-boot-static.
+///
+/// The result is cached per-[`PlatformUaConfig`] for the process lifetime.
+pub fn platform_ua_string(config: &PlatformUaConfig) -> String {
+    tokens::platform_ua_string(config)
+}
+
+/// Build just the identity-bearing portion of the token string.
+///
+/// Format: `aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [i/{installer}] [o/{org}] [m/{machine}]`
+///
+/// Only appropriate to send to Anaconda-operated domains where the
+/// consumer has opted in to telemetry. For non-Anaconda domains, use
+/// [`platform_ua_string`] alone.
+pub fn identity_tokens(config: &Config) -> String {
+    match tokens::identity_tokens(config) {
         Ok(s) => s,
         Err(e) => {
             tracing::error!("Failed to generate AAU tokens: {}", e);
             format!("aau/{}", VERSION)
         }
+    }
+}
+
+/// Build the full token string (platform UA + identity tokens).
+///
+/// Format: `[prefix...] [reqwest/{ver}] [platform...] [rattler/{ver}] aau/{version} c/{client} s/{session} e/{env} [a/{cloud}] [o/{org}] [m/{machine}] [i/{installer}]`
+///
+/// This is the full User-Agent for requests to Anaconda-operated domains.
+/// For requests to non-Anaconda domains, use [`platform_ua_string`] alone
+/// to avoid sending identity tokens off-platform.
+pub fn token_string(config: &Config) -> String {
+    let platform = platform_ua_string(&config.into());
+    let identity = identity_tokens(config);
+    if platform.is_empty() {
+        identity
+    } else if identity.is_empty() {
+        platform
+    } else {
+        format!("{} {}", platform, identity)
     }
 }
 
