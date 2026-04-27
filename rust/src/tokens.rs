@@ -1,7 +1,7 @@
 //! Token generation and caching for all AAU token types.
 
 use super::utils::{random_token, read_file, saved_token};
-use super::{Config, Error, Result, TokenEntry, VERSION};
+use super::{Config, Error, PlatformUaConfig, Result, TokenEntry, VERSION};
 use base64::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,6 +24,12 @@ static TOKEN_CACHE: LazyLock<Mutex<HashMap<String, String>>> =
 // Cache for multi-valued system tokens (installer, org, machine).
 type SystemTokenMap = HashMap<String, Vec<(String, String)>>;
 static SYSTEM_TOKEN_CACHE: LazyLock<Mutex<SystemTokenMap>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+// Cache for the non-identifying platform UA string, keyed by PlatformUaConfig.
+// Inputs are all compile-time-constant or first-boot-static, so the output
+// is stable for the process lifetime.
+static PLATFORM_UA_CACHE: LazyLock<Mutex<HashMap<PlatformUaConfig, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Cached search paths — filesystem checks done once per process.
@@ -462,18 +468,14 @@ fn parse_prefix(prefix: &str) -> Vec<TokenEntry> {
         .collect()
 }
 
-/// Collect all AAU tokens with provenance information.
+/// Collect the non-identifying portion of the UA as `TokenEntry` values.
 ///
-/// This is the single source of truth for token assembly. The ordering is:
+/// Ordering:
 /// 1. Prefix entries (from `config.prefix`)
-/// 2. Reqwest version (if `reqwest` feature is enabled)
+/// 2. Reqwest version (if `reqwest` feature is enabled or `config.reqwest_version` is set)
 /// 3. Platform tokens (if `config.platform` is true)
-/// 4. Rattler version (if `rattler` feature is enabled)
-/// 5. AAU tokens (`aau/`, `c/`, `s/`, `e/`, `a/`, `i/`, `o/`, `m/`)
-///
-/// The token string can be exactly reproduced by joining entries as
-/// `"{prefix}/{value}"` (or just `"{prefix}"` when value is empty).
-fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
+/// 4. Rattler version (if `rattler` feature is enabled or `config.rattler_version` is set)
+fn collect_platform_tokens(config: &PlatformUaConfig) -> Vec<TokenEntry> {
     let mut entries = Vec::new();
 
     // 1. Prefix entries
@@ -547,7 +549,16 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
         }
     }
 
-    // 5. AAU version (always first of the AAU tokens)
+    entries
+}
+
+/// Collect the identity-bearing portion of the UA as `TokenEntry` values.
+///
+/// Ordering: `aau/ c/ s/ e/ a/ i/ o/ m/`
+fn collect_identity_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
+    let mut entries = Vec::new();
+
+    // AAU version (always first of the AAU tokens)
     entries.push(TokenEntry {
         prefix: "aau".into(),
         label: "version".into(),
@@ -635,25 +646,46 @@ fn collect_tokens(config: &Config) -> Result<Vec<TokenEntry>> {
     Ok(entries)
 }
 
-/// Build the full token string.
+/// Build the non-identifying platform UA string, caching the result
+/// per-`PlatformUaConfig` for the process lifetime.
+pub fn platform_ua_string(config: &PlatformUaConfig) -> String {
+    if let Some(hit) = PLATFORM_UA_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(config)
+        .cloned()
+    {
+        return hit;
+    }
+    let entries = collect_platform_tokens(config);
+    let value = entries_to_string(&entries);
+    tracing::debug!("Platform UA string: {}", value);
+    let mut cache = PLATFORM_UA_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    cache.entry(config.clone()).or_insert(value).clone()
+}
+
+/// Build just the identity-bearing portion of the token string.
 ///
-/// Format: `[prefix...] [reqwest/{ver}] [platform...] [rattler/{ver}] aau/{ver} c/{client} s/{session} e/{env} [a/{cloud}] [i/{installer}] [o/{org}] [m/{machine}]`
-pub fn token_string(config: &Config) -> Result<String> {
-    let entries = collect_tokens(config)?;
+/// Format: `aau/{ver} c/{client} s/{session} e/{env} [a/{cloud}] [i/{installer}] [o/{org}] [m/{machine}]`
+pub fn identity_tokens(config: &Config) -> Result<String> {
+    let entries = collect_identity_tokens(config)?;
     let result = entries_to_string(&entries);
-    tracing::debug!("Full aau token string: {}", result);
+    tracing::debug!("Identity tokens: {}", result);
     Ok(result)
 }
 
 /// Collect all AAU tokens with per-token provenance information.
 ///
-/// Returns individual token entries including the `aau/` version entry.
-/// The token string can be exactly reproduced by joining entries:
+/// Returns the concatenation of `collect_platform_tokens` followed by
+/// `collect_identity_tokens`. The token string can be exactly reproduced
+/// by joining entries:
 /// ```ignore
 /// entries.iter().map(|e| format!("{}/{}", e.prefix, e.value)).collect::<Vec<_>>().join(" ")
 /// ```
 pub fn token_details(config: &Config) -> Result<Vec<TokenEntry>> {
-    collect_tokens(config)
+    let mut entries = collect_platform_tokens(&config.into());
+    entries.extend(collect_identity_tokens(config)?);
+    Ok(entries)
 }
 
 /// Join token entries into a space-separated token string.
@@ -683,6 +715,15 @@ mod tests {
             env_prefix: Some("/nonexistent/prefix".to_string()),
             ..Default::default()
         }
+    }
+
+    /// Test helper: reproduce the legacy `token_string` shape from the
+    /// current split API. Returns the same string the public
+    /// `crate::token_string` returns on success, but propagates the
+    /// underlying `Result` for assertion ergonomics.
+    fn token_string(config: &Config) -> Result<String> {
+        let entries = token_details(config)?;
+        Ok(entries_to_string(&entries))
     }
 
     // ---- is_valid_token ----
@@ -1211,5 +1252,141 @@ mod tests {
             !search_path.contains(&override_path),
             "without test-support, override path MUST NOT appear in search path"
         );
+    }
+
+    // ---- split API: platform_ua_string / identity_tokens ----
+
+    #[test]
+    fn platform_ua_string_has_no_identity_tokens() {
+        let ua = platform_ua_string(&PlatformUaConfig {
+            prefix: Some("ana/0.1.0".into()),
+            platform: true,
+            ..Default::default()
+        });
+        for id in [" aau/", " c/", " s/", " e/", " a/", " i/", " o/", " m/"] {
+            assert!(
+                !ua.contains(id) && !ua.starts_with(id.trim_start()),
+                "platform UA must not contain identity token {:?}: {}",
+                id,
+                ua
+            );
+        }
+    }
+
+    #[test]
+    fn platform_ua_string_empty_for_default_config_without_platform() {
+        // No prefix, no platform, no rattler/reqwest — nothing to emit.
+        let ua = platform_ua_string(&PlatformUaConfig {
+            platform: false,
+            ..Default::default()
+        });
+        assert_eq!(ua, "");
+    }
+
+    #[test]
+    fn platform_ua_string_contains_prefix_and_platform() {
+        let ua = platform_ua_string(&PlatformUaConfig {
+            prefix: Some("ana/0.1.0".into()),
+            platform: true,
+            ..Default::default()
+        });
+        assert!(ua.starts_with("ana/0.1.0"), "got: {}", ua);
+        // Platform tokens are OS-specific, but at least one should be present.
+        assert!(
+            crate::platform::platform_tokens()
+                .iter()
+                .any(|pt| ua.contains(&pt.name)),
+            "expected some platform token in: {}",
+            ua
+        );
+    }
+
+    #[test]
+    fn identity_tokens_starts_with_aau_and_contains_client_session() {
+        let result = identity_tokens(&default_config()).unwrap();
+        assert!(
+            result.starts_with(&format!("aau/{}", VERSION)),
+            "{}",
+            result
+        );
+        assert!(result.contains(" c/"), "{}", result);
+        assert!(result.contains(" s/"), "{}", result);
+    }
+
+    #[test]
+    fn identity_tokens_has_no_platform_prefix_or_version_tokens() {
+        // Use a config with prefix + platform on — identity_tokens should
+        // still not emit any of the non-identifying fields.
+        let cfg = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            prefix: Some("ana/0.1.0".into()),
+            platform: true,
+            rattler_version: Some("1.2.3".into()),
+            reqwest_version: Some("0.12.0".into()),
+            ..Default::default()
+        };
+        let ident = identity_tokens(&cfg).unwrap();
+        assert!(!ident.contains("ana/0.1.0"), "{}", ident);
+        assert!(!ident.contains("rattler/"), "{}", ident);
+        assert!(!ident.contains("reqwest/"), "{}", ident);
+    }
+
+    #[test]
+    fn token_details_equals_platform_plus_identity() {
+        let cfg = Config {
+            env_prefix: Some("/nonexistent/prefix".into()),
+            prefix: Some("ana/0.1.0".into()),
+            platform: true,
+            ..Default::default()
+        };
+        let entries = token_details(&cfg).unwrap();
+        let joined = entries_to_string(&entries);
+
+        let platform = platform_ua_string(&(&cfg).into());
+        let ident = identity_tokens(&cfg).unwrap();
+        let expected = if platform.is_empty() {
+            ident
+        } else {
+            format!("{} {}", platform, ident)
+        };
+
+        assert_eq!(joined, expected);
+    }
+
+    #[test]
+    fn platform_ua_string_is_cached() {
+        // Use a unique prefix to avoid collisions with other tests' cache entries.
+        let cfg = PlatformUaConfig {
+            prefix: Some("aau_test_cache/42".into()),
+            platform: false,
+            ..Default::default()
+        };
+        let first = platform_ua_string(&cfg);
+        // Direct cache inspection — the value must be stored under the
+        // exact config key used to produce it.
+        let hit = PLATFORM_UA_CACHE
+            .lock()
+            .unwrap()
+            .get(&cfg)
+            .cloned()
+            .expect("platform UA should have been cached after first call");
+        assert_eq!(first, hit);
+    }
+
+    #[test]
+    fn platform_ua_config_from_config_copies_fields() {
+        let cfg = Config {
+            prefix: Some("myapp/1.0".into()),
+            platform: true,
+            rattler_version: Some("0.40.5".into()),
+            reqwest_version: Some("0.12.5".into()),
+            env_prefix: Some("/ignored".into()),
+            anaconda_jwt: Some("ignored".into()),
+        };
+        let ua: PlatformUaConfig = (&cfg).into();
+        assert_eq!(ua.prefix.as_deref(), Some("myapp/1.0"));
+        assert!(ua.platform);
+        assert_eq!(ua.rattler_version.as_deref(), Some("0.40.5"));
+        assert_eq!(ua.reqwest_version.as_deref(), Some("0.12.5"));
     }
 }
