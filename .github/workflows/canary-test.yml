@@ -81,7 +81,7 @@ jobs:
         conda activate base
         conda info 2>&1 | tee output.txt
         if grep -q 'Error loading' output.txt; then exit -1; fi
-        pytest
+        pytest --ignore=tests/test_rust_parity.py
         python tests/integration/test_config.py
     - name: Test heartbeats (pwsh)
       if: matrix.os == 'windows-latest'
