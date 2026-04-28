@@ -359,6 +359,7 @@ def token_string(prefix=None, enabled=True):
 def _cli():
     """CLI for testing anaconda-anon-usage token generation."""
     import os
+    from pathlib import Path
 
     args = sys.argv[1:]
 
@@ -368,6 +369,8 @@ def _cli():
     detail = False
     no_keyring = False
     jwt = None
+    attribution = None
+    platform_override = None
 
     while args:
         if args[0] == "--verbose":
@@ -387,6 +390,14 @@ def _cli():
             print("  --paths            Print the system token search path")
             print("  --random           Generate and print a random token")
             print("  --version          Print the package version")
+            print()
+            print("Attribution (installer token extraction):")
+            print("  --attribution FILE Extract installer token from FILE")
+            print("  --platform PLAT    Override platform (windows/darwin/linux)")
+            print()
+            print("Example:")
+            print("  anaconda-anon-usage --attribution installer.exe \\")
+            print("      --prefix /opt/conda --platform windows")
             sys.exit(0)
         elif args[0] == "--version":
             print(__version__)
@@ -416,6 +427,23 @@ def _cli():
         elif args[0] == "--no-keyring":
             no_keyring = True
             args.pop(0)
+        elif args[0] == "--attribution":
+            args.pop(0)
+            attribution = args.pop(0) if args else None
+            if attribution is None:
+                print("--attribution requires a file path", file=sys.stderr)
+                sys.exit(1)
+        elif args[0] == "--platform":
+            args.pop(0)
+            platform_override = args.pop(0) if args else None
+            if platform_override is None:
+                print("--platform requires a value", file=sys.stderr)
+                sys.exit(1)
+            if platform_override not in ("windows", "darwin", "linux"):
+                print(
+                    "--platform must be one of: windows, darwin, linux", file=sys.stderr
+                )
+                sys.exit(1)
         else:
             print(f"Unknown option: {args[0]}", file=sys.stderr)
             sys.exit(1)
@@ -424,6 +452,34 @@ def _cli():
         from . import utils
 
         utils.DEBUG = True
+
+    # Handle attribution mode
+    if attribution:
+        if prefix is None:
+            print("--attribution requires --prefix", file=sys.stderr)
+            sys.exit(1)
+        from .attribution import save_installer_attribution
+
+        installer_file = Path(attribution)
+        if not installer_file.is_file():
+            print(f"Error: {installer_file} does not exist.", file=sys.stderr)
+            sys.exit(1)
+        token_file = Path(prefix) / ("." + INSTALLER_TOKEN_NAME)
+        try:
+            saved = save_installer_attribution(
+                installer_file, token_file, platform_override
+            )
+            if saved:
+                _debug("Installer token saved to %s", token_file)
+            else:
+                _debug("No attribution data found in installer.")
+        except RuntimeError as e:
+            _debug("Warning: %s", e)
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(0)
+
     if jwt:
         os.environ["ANACONDA_AUTH_API_KEY"] = jwt
     elif no_keyring:
