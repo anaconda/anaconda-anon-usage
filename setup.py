@@ -22,13 +22,13 @@ setup(
                 "anaconda-anon-usage-plugin = anaconda_anon_usage.plugin",
             ],
             "console_scripts": [
-                "anaconda-anon-usage = anaconda_anon_usage.tokens:_cli",
+                "anaconda-anon-usage = anaconda_anon_usage.main:main",
             ],
         }
         if os.environ.get("NEED_SCRIPTS") != "yes"
         else {
             "console_scripts": [
-                "anaconda-anon-usage = anaconda_anon_usage.tokens:_cli",
+                "anaconda-anon-usage = anaconda_anon_usage.main:main",
             ],
         }
     ),
