@@ -1,5 +1,6 @@
 """Command-line entry point for the ``anaconda-anon-usage`` executable."""
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -16,29 +17,58 @@ from .tokens import (
 )
 from .utils import _debug, _random_token
 
+_PLATFORMS = ("windows", "darwin", "linux")
 
-def _print_help():
-    print(f"anaconda-anon-usage {__version__} (Python package)")
-    print()
-    print("Usage: anaconda-anon-usage [options]")
-    print()
-    print("Options:")
-    print("  --verbose          Increase verbosity")
-    print("  --detail           Print per-token provenance")
-    print("  --prefix PATH      Use PATH as the environment prefix")
-    print("  --jwt TOKEN        Use TOKEN as the Anaconda auth JWT")
-    print("  --no-keyring       Disable keyring lookups")
-    print("  --paths            Print the system token search path")
-    print("  --random           Generate and print a random token")
-    print("  --version          Print the package version")
-    print()
-    print("Attribution (installer token extraction):")
-    print("  --attribution FILE Extract installer token from FILE")
-    print("  --platform PLAT    Override platform (windows/darwin/linux)")
-    print()
-    print("Example:")
-    print("  anaconda-anon-usage --attribution installer.exe \\")
-    print("      --prefix /opt/conda --platform windows")
+
+def _build_parser():
+    parser = argparse.ArgumentParser(
+        prog="anaconda-anon-usage",
+        description=f"anaconda-anon-usage {__version__} (Python package)",
+        epilog=(
+            "Example:\n"
+            "  anaconda-anon-usage --attribution installer.exe"
+            " --prefix /opt/conda --platform windows"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--verbose", action="count", default=0, help="Increase verbosity"
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=__version__,
+        help="Print the package version",
+    )
+    parser.add_argument(
+        "--detail", action="store_true", help="Print per-token provenance"
+    )
+    parser.add_argument(
+        "--prefix", metavar="PATH", help="Use PATH as the environment prefix"
+    )
+    parser.add_argument(
+        "--jwt", metavar="TOKEN", help="Use TOKEN as the Anaconda auth JWT"
+    )
+    parser.add_argument(
+        "--no-keyring", action="store_true", help="Disable keyring lookups"
+    )
+    parser.add_argument(
+        "--paths", action="store_true", help="Print the system token search path"
+    )
+    parser.add_argument(
+        "--random", action="store_true", help="Generate and print a random token"
+    )
+
+    attr = parser.add_argument_group("attribution (installer token extraction)")
+    attr.add_argument(
+        "--attribution", metavar="FILE", help="Extract installer token from FILE"
+    )
+    attr.add_argument(
+        "--platform",
+        choices=_PLATFORMS,
+        help="Override platform (windows/darwin/linux)",
+    )
+    return parser
 
 
 def _run_attribution(attribution, prefix, platform_override):
@@ -94,90 +124,33 @@ def _print_detail(prefix):
 
 def main():
     """CLI for testing anaconda-anon-usage token generation."""
-    args = sys.argv[1:]
+    args = _build_parser().parse_args()
 
-    verbosity = 0
-    prefix = None
-    detail = False
-    no_keyring = False
-    jwt = None
-    attribution = None
-    platform_override = None
-
-    while args:
-        if args[0] == "--verbose":
-            verbosity += 1
-            args.pop(0)
-        elif args[0] == "--help":
-            _print_help()
-            sys.exit(0)
-        elif args[0] == "--version":
-            print(__version__)
-            sys.exit(0)
-        elif args[0] == "--paths":
-            for p in _search_path():
-                print(p)
-            sys.exit(0)
-        elif args[0] == "--random":
-            print(_random_token())
-            sys.exit(0)
-        elif args[0] == "--prefix":
-            args.pop(0)
-            prefix = args.pop(0) if args else None
-            if prefix is None:
-                print("--prefix requires a value", file=sys.stderr)
-                sys.exit(1)
-        elif args[0] == "--jwt":
-            args.pop(0)
-            jwt = args.pop(0) if args else None
-            if jwt is None:
-                print("--jwt requires a value", file=sys.stderr)
-                sys.exit(1)
-        elif args[0] == "--detail":
-            detail = True
-            args.pop(0)
-        elif args[0] == "--no-keyring":
-            no_keyring = True
-            args.pop(0)
-        elif args[0] == "--attribution":
-            args.pop(0)
-            attribution = args.pop(0) if args else None
-            if attribution is None:
-                print("--attribution requires a file path", file=sys.stderr)
-                sys.exit(1)
-        elif args[0] == "--platform":
-            args.pop(0)
-            platform_override = args.pop(0) if args else None
-            if platform_override is None:
-                print("--platform requires a value", file=sys.stderr)
-                sys.exit(1)
-            if platform_override not in ("windows", "darwin", "linux"):
-                print(
-                    "--platform must be one of: windows, darwin, linux",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-        else:
-            print(f"Unknown option: {args[0]}", file=sys.stderr)
-            sys.exit(1)
-
-    if verbosity:
+    if args.verbose:
         from . import utils
 
         utils.DEBUG = True
 
-    if attribution:
-        _run_attribution(attribution, prefix, platform_override)
-        sys.exit(0)
+    if args.paths:
+        for p in _search_path():
+            print(p)
+        return
+    if args.random:
+        print(_random_token())
+        return
 
-    if jwt:
-        os.environ["ANACONDA_AUTH_API_KEY"] = jwt
-    elif no_keyring:
+    if args.attribution:
+        _run_attribution(args.attribution, args.prefix, args.platform)
+        return
+
+    if args.jwt:
+        os.environ["ANACONDA_AUTH_API_KEY"] = args.jwt
+    elif args.no_keyring:
         os.environ["ANACONDA_DOMAIN"] = "__disabled__"
 
-    print(token_string(prefix))
-    if detail:
-        _print_detail(prefix)
+    print(token_string(args.prefix))
+    if args.detail:
+        _print_detail(args.prefix)
 
 
 if __name__ == "__main__":
