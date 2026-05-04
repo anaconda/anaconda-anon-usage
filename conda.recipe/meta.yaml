@@ -16,7 +16,7 @@ build:
   string: py_{{ PKG_BUILDNUM }}
   noarch: python
   entry_points:
-   - anaconda-anon-usage = anaconda_anon_usage.tokens:_cli
+   - anaconda-anon-usage = anaconda_anon_usage.main:main
   script_env:
    - NEED_SCRIPTS=no   # [variant=="plugin"]
    - NEED_SCRIPTS=yes  # [variant=="patch"]
@@ -39,11 +39,13 @@ test:
     - conda
   imports:
     - anaconda_anon_usage
+    - anaconda_anon_usage.main
     - anaconda_anon_usage.patch
     - anaconda_anon_usage.tokens
   commands:
     - pip check
     - anaconda-anon-usage --version
+    - anaconda-anon-usage --help
     - anaconda-anon-usage --no-keyring | grep -q "^aau/"
     - ANACONDA_ANON_USAGE_DEBUG=1 conda info
     - conda info | grep -q "user-agent.* aau/"
