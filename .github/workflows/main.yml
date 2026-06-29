@@ -87,6 +87,17 @@ jobs:
       ANACONDA_ANON_USAGE_DEBUG: 1
       ANACONDA_ANON_USAGE_RAISE: 1
       PYTHONUNBUFFERED: 1
+      # The base conda ships conda-libmamba-solver 26.4.0, which enables the
+      # CEP-16 sharded-repodata pipeline by default. Its concurrent SQLite
+      # cache (conda_libmamba_solver/shards_cache.py) intermittently raises
+      # "database is locked" under GitHub Actions I/O, flaking solves in this
+      # job (most visibly on ubuntu-24.04-arm). Disable the sharded path via
+      # the `plugins.use_sharded_repodata` setting -- note the `plugins.`
+      # prefix; the unprefixed name matches nothing. Older condas that do not
+      # know the key ignore the env var rather than erroring on it. The bug is
+      # fixed in conda-libmamba-solver 26.4.1 (conda/conda-libmamba-solver#924);
+      # remove this once the base miniconda ships a solver >= 26.4.1.
+      CONDA_PLUGINS_USE_SHARDED_REPODATA: "false"
     defaults:
       run:
         # https://github.com/conda-incubator/setup-miniconda#use-a-default-shell
@@ -144,18 +155,6 @@ jobs:
       run: |
         rm -rf $CONDA/conda-bld || :
         mv conda-bld $CONDA/
-        # Disable the libmamba-solver sharded-repodata pipeline while we are
-        # operating with the base conda: its concurrent SQLite cache
-        # (conda_libmamba_solver/shards_cache.py) intermittently hits
-        # "database is locked" under GitHub Actions I/O, which surfaced as a
-        # flake on ubuntu-24.04-arm. `use_sharded_repodata` is only known to
-        # newer conda releases, so guard the set to avoid CondaKeyError on
-        # older base environments.
-        shards_key_set=0
-        if conda config --describe use_sharded_repodata >/dev/null 2>&1; then
-          conda config --set use_sharded_repodata false
-          shards_key_set=1
-        fi
         version=$(conda search local::anaconda-anon-usage | tail -1 | awk '{print $2}')
         pkg="anaconda-anon-usage=$version"
         # This is to address an issue with Linux ARM Python 3.9 only
@@ -180,21 +179,6 @@ jobs:
         conda create -p ./testenv/envs/testchild2 python --yes
         if [ -f ./testenv/Scripts/conda.exe ]; then \
            sed -i.bak "s@CONDA_EXE=.*@CONDA_EXE=$PWD/testenv/Scripts/conda.exe@" testenv/etc/profile.d/conda.sh; \
-        fi
-        # The testenv's conda (matrix cversion) also reads ~/.condarc. If it
-        # does not recognize `use_sharded_repodata`, strip the key so later
-        # steps that invoke the testenv conda do not fail with CondaKeyError.
-        # `conda config --remove-key` itself errors on unknown keys, so call
-        # it via the base conda that set the key in the first place, and then
-        # fall back to editing ~/.condarc directly if anything goes wrong.
-        if [ "$shards_key_set" = 1 ]; then
-          testenv_conda=./testenv/bin/conda
-          [ -f ./testenv/Scripts/conda.exe ] && testenv_conda=./testenv/Scripts/conda.exe
-          if [ -x "$testenv_conda" ] && \
-             ! "$testenv_conda" config --describe use_sharded_repodata >/dev/null 2>&1; then
-            conda config --remove-key use_sharded_repodata 2>/dev/null \
-              || sed -i.bak '/^use_sharded_repodata:/d' "$HOME/.condarc"
-          fi
         fi
         conda config --set solver classic
     - name: Test code
