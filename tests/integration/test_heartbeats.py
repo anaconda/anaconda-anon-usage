@@ -10,6 +10,48 @@ from conda.models.channel import Channel
 from anaconda_anon_usage import __version__ as aau_version
 from anaconda_anon_usage import patch
 
+
+def heartbeat_on_activate_supported():
+    """Heartbeats fire from a patch to ``_Activator.activate`` that is only
+    installed when our code runs during ``conda shell.* activate``. Two
+    delivery mechanisms exist:
+
+    * plugin variant: conda's pre-command hook installs the patch. conda
+      PR #15877 ("Skip plugin loading on shell activate path") stops conda
+      from invoking plugins on the activate path, so the hook never fires
+      and no heartbeat is sent.
+    * patch variant: ``install.py`` injects our loader into
+      ``conda.base.context``, which the activator always imports. This path
+      is immune to #15877.
+
+    Probe the actual capability rather than pinning conda versions: #15877
+    is not in a numbered release yet, and this self-corrects once conda
+    restores an activate-path hook or an alternative lands upstream.
+    """
+    import inspect
+
+    from conda import activate
+    from conda.base import context as _ctx_mod
+
+    # Legacy patch variant: loader injected directly into context.py.
+    if "anaconda_anon_usage" in inspect.getsource(_ctx_mod):
+        return True
+    # Plugin variant: supported only if conda still invokes pre-command
+    # plugins unconditionally on the activate path (i.e. pre-#15877).
+    try:
+        execute_src = inspect.getsource(activate._Activator.execute)
+    except (OSError, TypeError, AttributeError):
+        return True  # can't introspect; assume supported and let it run
+    return "plugins_loaded" not in execute_src
+
+
+if not heartbeat_on_activate_supported():
+    print(
+        "SKIP: heartbeat-on-activate unsupported by this conda "
+        "(see conda PR #15877); heartbeats are off by default."
+    )
+    sys.exit(0)
+
 patch.main()
 context.__init__()
 expected = ("aau", "c", "s", "e")
