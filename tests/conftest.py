@@ -7,7 +7,10 @@ from os import mkdir
 from os.path import dirname, join
 
 import pytest
+from conda import activate
 from conda.base.context import Context, context
+from conda.cli import install as cli_install
+from conda.cli import main_info
 
 from anaconda_anon_usage import tokens, utils
 
@@ -139,10 +142,6 @@ def client_token_string_cache_cleanup(request):
 @pytest.fixture(autouse=True)
 def reset_patch(request):
     def _resetter():
-        from conda import activate
-        from conda.cli import install as cli_install
-        from conda.cli import main_info
-
         for k in (
             "___new_user_agent",
             "__user_agent",

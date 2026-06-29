@@ -39,6 +39,20 @@ modify the user agent string. The conda package also installs a Python
 startup hook for shell activation commands so opt-in activation heartbeats can
 run even when conda avoids loading plugins on the activation fast path.
 
+There are a few activation paths, depending on the conda version and command:
+
+- With conda versions that support plugins, normal conda commands load the
+  pre-command plugin. That path applies the user-agent patch and keeps
+  `conda info` output redacted.
+- Older conda versions use the legacy patch variant, which installs activation
+  and link scripts to patch conda's context machinery directly.
+- Shell activation commands, such as `conda shell.posix activate`, can run on a
+  fast path that avoids plugin loading. The conda package covers that path with
+  Python startup hook files that only continue when the process is handling
+  shell activation, then install the activation heartbeat patch.
+- If both the plugin and startup hook paths run in one process, activation
+  patching is idempotent.
+
 ### Rust crate
 
 A Rust implementation of this package is available as a crate:

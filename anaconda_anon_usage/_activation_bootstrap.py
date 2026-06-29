@@ -1,3 +1,11 @@
+"""Bootstrap activation patching from Python startup hooks.
+
+Normal conda commands use the conda pre-command plugin, but recent conda
+activation can bypass plugin loading on the shell activation fast path. This
+module is imported by startup hook files and then checks ``sys.argv`` before
+loading the heavier patching code, so unrelated Python startup remains cheap.
+"""
+
 import os
 import sys
 
@@ -9,6 +17,8 @@ def maybe_patch_activation(argv=None):
         return False
 
     try:
+        # Keep this lazy. Python startup hooks may import this module for
+        # non-activation processes, but only activation needs conda patching.
         from . import patch
 
         return patch.main(plugin=True, command="activate")
