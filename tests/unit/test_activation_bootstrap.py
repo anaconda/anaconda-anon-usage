@@ -42,9 +42,7 @@ def test_maybe_patch_activation_defaults_to_sys_argv(mocker, monkeypatch):
     patch_main.assert_called_once_with(plugin=True, command="activate")
 
 
-def test_maybe_patch_activation_swallows_errors_by_default(
-    mocker, monkeypatch, capsys
-):
+def test_maybe_patch_activation_swallows_errors_by_default(mocker, monkeypatch, capsys):
     mocker.patch("anaconda_anon_usage.patch.main", side_effect=RuntimeError("failed"))
     monkeypatch.delenv("ANACONDA_ANON_USAGE_RAISE", raising=False)
     monkeypatch.delenv("ANACONDA_ANON_USAGE_DEBUG", raising=False)
