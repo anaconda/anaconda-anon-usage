@@ -59,6 +59,19 @@ def test_main_already_patched():
     assert not response
 
 
+def test_patch_activate_idempotent():
+    from conda import activate
+
+    patch._patch_activate()
+    old_activate = activate._Activator._old_activate
+    new_activate = activate._Activator.activate
+
+    patch._patch_activate()
+
+    assert activate._Activator._old_activate is old_activate
+    assert activate._Activator.activate is new_activate
+
+
 def test_patch_check_prefix_missing(monkeypatch):
     """When conda.cli.install.check_prefix doesn't exist, patching
     should skip gracefully and still mark initialization as complete."""

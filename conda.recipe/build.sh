@@ -2,6 +2,12 @@
 "${PREFIX}/bin/python" -m pip install --no-deps --ignore-installed -vv .
 if [ "$NEED_SCRIPTS" != yes ]; then
     rm ${SP_DIR}/anaconda_anon_usage/install.py
+    cp \
+        "scripts/anaconda_anon_usage_activation.pth" \
+        "${SP_DIR}/anaconda_anon_usage_activation.pth"
+    cp \
+        "scripts/anaconda_anon_usage_activation.start" \
+        "${SP_DIR}/anaconda_anon_usage_activation.start"
     exit 0
 fi
 rm ${SP_DIR}/anaconda_anon_usage/plugin.py
