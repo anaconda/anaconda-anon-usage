@@ -53,6 +53,13 @@ There are a few activation paths, depending on the conda version and command:
 - If both the plugin and startup hook paths run in one process, activation
   patching is idempotent.
 
+The conda package installs both `anaconda_anon_usage_activation.pth` and
+`anaconda_anon_usage_activation.start`. The `.pth` file covers current Python
+versions that still execute `import` lines at startup. The matching `.start`
+file follows [PEP 829](https://peps.python.org/pep-0829/) for Python versions
+that prefer structured `pkg.mod:callable` startup entry points and ignore the
+matching `.pth` import line.
+
 ### Rust crate
 
 A Rust implementation of this package is available as a crate:

@@ -2,6 +2,8 @@
 "${PREFIX}/bin/python" -m pip install --no-deps --ignore-installed -vv .
 if [ "$NEED_SCRIPTS" != yes ]; then
     rm ${SP_DIR}/anaconda_anon_usage/install.py
+    # Ship both Python startup hook forms: .pth for current Python releases and
+    # .start for PEP 829-capable Python releases.
     cp \
         "scripts/anaconda_anon_usage_activation.pth" \
         "${SP_DIR}/anaconda_anon_usage_activation.pth"
