@@ -21,7 +21,7 @@ jobs:
       anaconda-anon-usage-spec: ${{ steps.discover.outputs.anaconda-anon-usage-spec }}
     steps:
     - name: Retrieve the source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
     - name: Discover latest canary build
       id: discover
       run: $CONDA/bin/python tests/canary_versions.py >>$GITHUB_OUTPUT
@@ -32,6 +32,11 @@ jobs:
       ANACONDA_ANON_USAGE_DEBUG: 1
       ANACONDA_ANON_USAGE_RAISE: 1
       PYTHONUNBUFFERED: 1
+      # See main.yml: disable the libmamba-solver sharded-repodata cache to
+      # avoid the intermittent "database is locked" flake. Note the `plugins.`
+      # prefix. Remove once the base miniconda ships
+      # conda-libmamba-solver >= 26.4.1.
+      CONDA_PLUGINS_USE_SHARDED_REPODATA: "false"
     defaults:
       run:
         shell: bash -el {0}
@@ -43,7 +48,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - name: Retrieve the source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
         fetch-depth: 0
     - name: Setup Miniconda
