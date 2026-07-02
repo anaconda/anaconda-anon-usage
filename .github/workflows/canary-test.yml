@@ -32,6 +32,11 @@ jobs:
       ANACONDA_ANON_USAGE_DEBUG: 1
       ANACONDA_ANON_USAGE_RAISE: 1
       PYTHONUNBUFFERED: 1
+      # See main.yml: disable the libmamba-solver sharded-repodata cache to
+      # avoid the intermittent "database is locked" flake. Note the `plugins.`
+      # prefix. Remove once the base miniconda ships
+      # conda-libmamba-solver >= 26.4.1.
+      CONDA_PLUGINS_USE_SHARDED_REPODATA: "false"
     defaults:
       run:
         shell: bash -el {0}
