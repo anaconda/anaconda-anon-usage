@@ -1,0 +1,1 @@
+import sys; len(sys.argv) > 2 and sys.argv[1].startswith("shell.") and sys.argv[2] == "activate" and __import__("anaconda_anon_usage._activation_bootstrap", fromlist=["maybe_patch_activation"]).maybe_patch_activation()

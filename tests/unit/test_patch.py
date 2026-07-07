@@ -1,6 +1,9 @@
 import re
 
+from conda import activate
 from conda.base.context import context
+from conda.cli import install as cli_install
+from conda.cli import main_info
 
 from anaconda_anon_usage import patch, tokens
 
@@ -59,11 +62,20 @@ def test_main_already_patched():
     assert not response
 
 
+def test_patch_activate_idempotent():
+    patch._patch_activate()
+    old_activate = activate._Activator._old_activate
+    new_activate = activate._Activator.activate
+
+    patch._patch_activate()
+
+    assert activate._Activator._old_activate is old_activate
+    assert activate._Activator.activate is new_activate
+
+
 def test_patch_check_prefix_missing(monkeypatch):
     """When conda.cli.install.check_prefix doesn't exist, patching
     should skip gracefully and still mark initialization as complete."""
-    from conda.cli import install as cli_install
-
     monkeypatch.delattr(cli_install, "check_prefix", raising=False)
     patch.main(plugin=True, command="info")
     assert context._aau_initialized is True
@@ -78,7 +90,6 @@ def test_main_info():
     for tok in ALL - {"aau"}:
         if tok in tokens:
             tokens[tok] = "."
-    from conda.cli import main_info
 
     info_dict = main_info.get_info_dict()
     assert info_dict["user_agent"] == context.user_agent

@@ -49,6 +49,8 @@ test:
     - anaconda-anon-usage --no-keyring | grep -q "^aau/"
     - ANACONDA_ANON_USAGE_DEBUG=1 conda info
     - conda info | grep -q "user-agent.* aau/"
+    - python -c "import site, pathlib; assert any((pathlib.Path(p) / 'anaconda_anon_usage_activation.pth').is_file() for p in site.getsitepackages())"  # [variant=="plugin"]
+    - python -c "import site, pathlib; assert any((pathlib.Path(p) / 'anaconda_anon_usage_activation.start').is_file() for p in site.getsitepackages())"  # [variant=="plugin"]
 
 about:
   home: https://github.com/Anaconda-Platform/anaconda-anon-usage
