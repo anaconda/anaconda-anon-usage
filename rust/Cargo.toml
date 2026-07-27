@@ -29,7 +29,7 @@ name = "anaconda-anon-usage"
 required-features = ["cli"]
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 dirs = "6"
 getrandom = "0.4"
 mac_address = "1.1"
