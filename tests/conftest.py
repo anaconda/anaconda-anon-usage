@@ -7,7 +7,10 @@ from os import mkdir
 from os.path import dirname, join
 
 import pytest
+from conda import activate
 from conda.base.context import Context, context
+from conda.cli import install as cli_install
+from conda.cli import main_info
 
 from anaconda_anon_usage import tokens, utils
 
@@ -139,18 +142,24 @@ def client_token_string_cache_cleanup(request):
 @pytest.fixture(autouse=True)
 def reset_patch(request):
     def _resetter():
-        from conda.cli import install as cli_install
-        from conda.cli import main_info
-
-        for k in ("___new_user_agent", "__user_agent", "anaconda_anon_usage"):
+        for k in (
+            "___new_user_agent",
+            "__user_agent",
+            "anaconda_anon_usage",
+            "anaconda_heartbeat",
+        ):
             context._cache_.pop(k, None)
         context._aau_initialized = None
         if hasattr(Context, "anaconda_anon_usage"):
             delattr(Context, "anaconda_anon_usage")
+        if hasattr(Context, "anaconda_heartbeat"):
+            delattr(Context, "anaconda_heartbeat")
         if hasattr(Context, "checked_prefix"):
             delattr(Context, "checked_prefix")
         Context.parameter_names = tuple(
-            k for k in Context.parameter_names if k != "anaconda_anon_usage"
+            k
+            for k in Context.parameter_names
+            if k not in {"anaconda_anon_usage", "anaconda_heartbeat"}
         )
         orig_check_prefix = getattr(Context, "_old_check_prefix", None)
         if orig_check_prefix is not None:
@@ -161,9 +170,17 @@ def reset_patch(request):
         if orig_user_agent is not None:
             Context.user_agent = orig_user_agent
             delattr(Context, "_old_user_agent")
-        orig_get_main_info_str = getattr(main_info, "_old_get_main_info_str", None)
+        activator = getattr(activate, "_Activator", None)
+        orig_activate = getattr(activator, "_old_activate", None)
+        if orig_activate is not None:
+            activator.activate = orig_activate
+            delattr(activator, "_old_activate")
+        orig_get_main_info_str = getattr(Context, "_old_get_main_info_str", None)
         if orig_get_main_info_str is not None:
-            main_info.get_main_info_str = orig_get_main_info_str
+            if hasattr(main_info, "get_main_info_display"):
+                main_info.get_main_info_display = orig_get_main_info_str
+            elif hasattr(main_info, "get_main_info_str"):
+                main_info.get_main_info_str = orig_get_main_info_str
             delattr(Context, "_old_get_main_info_str")
 
     request.addfinalizer(_resetter)

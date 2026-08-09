@@ -35,7 +35,30 @@ conda install -n base anaconda-anon-usage
 ```
 This package has no additional dependencies other than `conda`
 itself. It employs a [conda pre-command plugin](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/conda-plugins.html) to
-modify the user agent string.
+modify the user agent string. The conda package also installs a Python
+startup hook for shell activation commands so opt-in activation heartbeats can
+run even when conda avoids loading plugins on the activation fast path.
+
+There are a few activation paths, depending on the conda version and command:
+
+- With conda versions that support plugins, normal conda commands load the
+  pre-command plugin. That path applies the user-agent patch and keeps
+  `conda info` output redacted.
+- Older conda versions use the legacy patch variant, which installs activation
+  and link scripts to patch conda's context machinery directly.
+- Shell activation commands, such as `conda shell.posix activate`, can run on a
+  fast path that avoids plugin loading. The conda package covers that path with
+  Python startup hook files that only continue when the process is handling
+  shell activation, then install the activation heartbeat patch.
+- If both the plugin and startup hook paths run in one process, activation
+  patching is idempotent.
+
+The conda package installs both `anaconda_anon_usage_activation.pth` and
+`anaconda_anon_usage_activation.start`. The `.pth` file covers current Python
+versions that still execute `import` lines at startup. The matching `.start`
+file follows [PEP 829](https://peps.python.org/pep-0829/) for Python versions
+that prefer structured `pkg.mod:callable` startup entry points and ignore the
+matching `.pth` import line.
 
 ### Rust crate
 

@@ -114,6 +114,8 @@ def _patch_activate():
     if hasattr(activate, "_Activator"):
         _Activator = activate._Activator
         if hasattr(_Activator, "activate"):
+            if hasattr(_Activator, "_old_activate"):
+                return
             _Activator._old_activate = _Activator.activate
             _Activator.activate = _new_activate
             return
