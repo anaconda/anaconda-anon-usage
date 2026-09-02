@@ -62,8 +62,7 @@ def _new_activate(self):
         attempt_heartbeat(env or sys.prefix, channel=channel, path=path)
     except Exception as exc:
         _debug("Failed to attempt heartbeat: %s", exc, error=True)
-    finally:
-        return self._old_activate()
+    return self._old_activate()
 
 
 def _patch_check_prefix():
