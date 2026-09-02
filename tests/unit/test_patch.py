@@ -1,8 +1,11 @@
 import re
+import sys
+from types import SimpleNamespace
 
+import pytest
 from conda.base.context import context
 
-from anaconda_anon_usage import patch, tokens
+from anaconda_anon_usage import heartbeat, patch, tokens
 
 BASIC = {"aau", "c", "s", "e"}
 SYSTEM = {"o", "m"}
@@ -91,3 +94,41 @@ def test_main_info():
     assert ua_strs
     token2 = dict(t.split("/", 1) for t in ua_strs[0].split(" "))
     assert token2 == tokens
+
+
+def test_new_activate_swallows_heartbeat_errors(monkeypatch):
+    """A failed heartbeat must never interrupt activation."""
+
+    def _fail(*args, **kwargs):
+        raise RuntimeError("heartbeat failed")
+
+    monkeypatch.setattr(patch.context, "anaconda_heartbeat", True, raising=False)
+    monkeypatch.setattr(heartbeat, "attempt_heartbeat", _fail)
+    # env_name_or_prefix contains os.sep, so locate_prefix_by_name is skipped
+    activator = SimpleNamespace(
+        env_name_or_prefix=sys.prefix,
+        _old_activate=lambda: "activation-script",
+    )
+
+    assert patch._new_activate(activator) == "activation-script"
+
+
+def test_new_activate_propagates_keyboard_interrupt(monkeypatch):
+    """Ctrl-C during the heartbeat must not be discarded.
+
+    `finally: return` swallows every BaseException, so KeyboardInterrupt was
+    silently dropped and activation returned as though nothing happened.
+    """
+
+    def _interrupt(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(patch.context, "anaconda_heartbeat", True, raising=False)
+    monkeypatch.setattr(heartbeat, "attempt_heartbeat", _interrupt)
+    activator = SimpleNamespace(
+        env_name_or_prefix=sys.prefix,
+        _old_activate=lambda: "activation-script",
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        patch._new_activate(activator)
