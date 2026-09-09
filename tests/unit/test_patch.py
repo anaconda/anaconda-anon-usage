@@ -1,11 +1,11 @@
 import re
 import sys
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from conda.base.context import context
 
-from anaconda_anon_usage import heartbeat, patch, tokens
+from anaconda_anon_usage import patch, tokens
 
 BASIC = {"aau", "c", "s", "e"}
 SYSTEM = {"o", "m"}
@@ -96,6 +96,12 @@ def test_main_info():
     assert token2 == tokens
 
 
+def _stub_heartbeat(monkeypatch, attempt_heartbeat):
+    fake = ModuleType("anaconda_anon_usage.heartbeat")
+    fake.attempt_heartbeat = attempt_heartbeat
+    monkeypatch.setitem(sys.modules, "anaconda_anon_usage.heartbeat", fake)
+
+
 def test_new_activate_swallows_heartbeat_errors(monkeypatch):
     """A failed heartbeat must never interrupt activation."""
 
@@ -103,7 +109,7 @@ def test_new_activate_swallows_heartbeat_errors(monkeypatch):
         raise RuntimeError("heartbeat failed")
 
     monkeypatch.setattr(patch.context, "anaconda_heartbeat", True, raising=False)
-    monkeypatch.setattr(heartbeat, "attempt_heartbeat", _fail)
+    _stub_heartbeat(monkeypatch, _fail)
     # env_name_or_prefix contains os.sep, so locate_prefix_by_name is skipped
     activator = SimpleNamespace(
         env_name_or_prefix=sys.prefix,
@@ -124,7 +130,7 @@ def test_new_activate_propagates_keyboard_interrupt(monkeypatch):
         raise KeyboardInterrupt
 
     monkeypatch.setattr(patch.context, "anaconda_heartbeat", True, raising=False)
-    monkeypatch.setattr(heartbeat, "attempt_heartbeat", _interrupt)
+    _stub_heartbeat(monkeypatch, _interrupt)
     activator = SimpleNamespace(
         env_name_or_prefix=sys.prefix,
         _old_activate=lambda: "activation-script",
