@@ -32,7 +32,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       with:
         components: rustfmt, clippy
     - name: Check formatting
@@ -270,7 +270,7 @@ jobs:
         anaconda --verbose --token $ANACONDA_TOKEN upload --user ctools $LABEL $packages --force
     - name: Install Rust toolchain
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-      uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
     - name: Set crate version from git tag
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       working-directory: rust
