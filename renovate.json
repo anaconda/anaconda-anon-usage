@@ -2,5 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>anaconda/renovate-config"
+  ],
+  "automerge": true,
+  "automergeType": "pr",
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Automerge any pull request opened by anaconda-renovate[bot].",
+      "matchPackageNames": ["*"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
   ]
 }
