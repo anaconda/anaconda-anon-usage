@@ -3,15 +3,14 @@
   "extends": [
     "github>anaconda/renovate-config"
   ],
-  "automerge": true,
-  "automergeType": "pr",
   "platformAutomerge": true,
   "packageRules": [
     {
-      "description": "Automerge any pull request opened by anaconda-renovate[bot].",
+      "description": "Automerge every update Renovate opens once required checks pass.",
       "matchPackageNames": ["*"],
       "automerge": true,
-      "automergeType": "pr"
+      "automergeType": "pr",
+      "rebaseWhen": "behind-base-branch"
     }
   ]
 }
