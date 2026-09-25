@@ -292,3 +292,9 @@ jobs:
         # --allow-dirty: the "Set crate version" step patches Cargo.toml
         # without committing, so cargo sees a dirty working tree.
         cargo publish --allow-dirty
+  tests-pass:
+    name: tests-pass
+    needs: [rust-test, test]
+    runs-on: ubuntu-latest
+    steps:
+    - run: echo "rust-test and test succeeded"

@@ -2,5 +2,15 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>anaconda/renovate-config"
+  ],
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Automerge every update Renovate opens once required checks pass.",
+      "matchPackageNames": ["*"],
+      "automerge": true,
+      "automergeType": "pr",
+      "rebaseWhen": "behind-base-branch"
+    }
   ]
 }
