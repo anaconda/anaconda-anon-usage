@@ -251,3 +251,7 @@ discussed above:
 ```
 anaconda_heartbeat: true #!final
 ```
+
+## Maintainer information
+
+See [MAINTAINERS.md](MAINTAINERS.md) for versioning and security reporting.
