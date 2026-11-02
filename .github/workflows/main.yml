@@ -226,8 +226,14 @@ jobs:
         source ./testenv/bin/activate
         conda info
         python tests/integration/test_heartbeats.py posix
+    # The installer steps are skipped on macos-15-intel (osx-64). defaults no
+    # longer builds for osx-64, and the eMudhra CA mitigation patched every
+    # conda-libmamba-solver record to constrain ca-certificates >=2026.10.20,
+    # which has no osx-64 build. conda >=24 is therefore unsolvable from
+    # defaults on osx-64. The test env still resolves because it falls back
+    # to conda-forge; the installer's channel list (local, defaults) does not.
     - name: Build an installer
-      if: matrix.cversion >= '24' && matrix.cversion < '4'
+      if: matrix.os != 'macos-15-intel' && matrix.cversion >= '24' && matrix.cversion < '4'
       run: |
         cd tests/integration
         export CONDA_PREFIX=$CONDA
@@ -241,14 +247,14 @@ jobs:
         call %USERPROFILE%\aidtest\Scripts\activate
         conda info
     - name: Run the installer (Unix)
-      if: matrix.os != 'windows-latest' && matrix.cversion >= '24' && matrix.cversion < '4'
+      if: matrix.os != 'windows-latest' && matrix.os != 'macos-15-intel' && matrix.cversion >= '24' && matrix.cversion < '4'
       run: |
         cd tests/integration
         bash AIDTest*.sh -b -p ~/aidtest -k
         source ~/aidtest/bin/activate
         conda info
     - name: Test the installed environment
-      if: matrix.cversion >= '24' && matrix.cversion < '4'
+      if: matrix.os != 'macos-15-intel' && matrix.cversion >= '24' && matrix.cversion < '4'
       run: |
         cd tests/integration
         bash test_environment.sh ~/aidtest
@@ -310,9 +316,24 @@ jobs:
         # --allow-dirty: the "Set crate version" step patches Cargo.toml
         # without committing, so cargo sees a dirty working tree.
         cargo publish --allow-dirty
+  # Required status check. It must run (and fail) when an upstream job fails:
+  # GitHub treats a *skipped* required check as passing, so a plain `needs:`
+  # gate lets auto-merge proceed on a red build. always() rather than
+  # !cancelled() so a cancelled run also reports failure instead of skipping.
   tests-pass:
     name: tests-pass
     needs: [rust-test, test]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-    - run: echo "rust-test and test succeeded"
+    - name: Require every upstream job to succeed
+      env:
+        RESULTS: ${{ join(needs.*.result, ' ') }}
+      run: |
+        echo "Upstream job results: $RESULTS"
+        for result in $RESULTS; do
+          if [ "$result" != "success" ]; then
+            echo "::error::An upstream job finished with '$result'"
+            exit 1
+          fi
+        done
