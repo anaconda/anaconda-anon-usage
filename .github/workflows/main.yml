@@ -158,7 +158,7 @@ jobs:
         miniconda-version: 'latest'
         auto-activate-base: true
         activate-environment: true
-        python-version: 3.12
+        python-version: 3.14
         channels: local,defaults,conda-forge
         # conda-forge is needed to pick up the noarch build of proxyspy
     - name: Build test environments

@@ -11,6 +11,12 @@
       "automerge": true,
       "automergeType": "pr",
       "rebaseWhen": "behind-base-branch"
+    },
+    {
+      "description": "Hold workflow python-version below 3.15 until conda ships py315 builds on defaults (the Build job installs conda and constructor into this env). Remove this cap once that lands. See PR #285.",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["python"],
+      "allowedVersions": "<3.15"
     }
   ]
 }
