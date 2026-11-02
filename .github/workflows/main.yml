@@ -68,6 +68,16 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
+    # The ubuntu-26.04 runner image (ubuntu-latest as of 2026-10-30) no
+    # longer ships Miniconda, so $CONDA is empty. setup-miniconda installs
+    # it and exports $CONDA for the steps below.
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+      with:
+        miniconda-version: 'latest'
+        auto-activate-base: true
+        activate-environment: ''
+        channels: defaults
     - name: Build the package
       shell: bash
       run: |
@@ -257,6 +267,14 @@ jobs:
       with:
         name: conda-bld
         path: conda-bld
+    - name: Setup Miniconda
+      if: github.event_name == 'push'
+      uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+      with:
+        miniconda-version: 'latest'
+        auto-activate-base: true
+        activate-environment: ''
+        channels: defaults
     - name: Upload to anaconda.org
       if: github.event_name == 'push'
       env:

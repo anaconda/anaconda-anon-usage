@@ -22,6 +22,16 @@ jobs:
     steps:
     - name: Retrieve the source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    # The ubuntu-26.04 runner image (ubuntu-latest as of 2026-10-30) no
+    # longer ships Miniconda, so $CONDA is empty. setup-miniconda installs
+    # it and exports $CONDA for the next step.
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+      with:
+        miniconda-version: 'latest'
+        auto-activate-base: true
+        activate-environment: ''
+        channels: defaults
     - name: Discover latest canary build
       id: discover
       run: $CONDA/bin/python tests/canary_versions.py >>$GITHUB_OUTPUT
@@ -119,7 +129,7 @@ jobs:
       run: |
         echo "=== Debug: Job Outputs ==="
         echo "CONDA_SPEC: '${{ needs.discover-canary.outputs.conda-spec }}'"
-        echo "AAU_SPEC: '${{ needs.discover-canary.outputs.anaconda-anon-usages-spec }}'"
+        echo "AAU_SPEC: '${{ needs.discover-canary.outputs.anaconda-anon-usage-spec }}'"
         echo "PYTHON_VERSIONS: '${{ needs.discover-canary.outputs.python-versions }}'"
         echo "TEST_RESULT: '${{ needs.test.result }}'"
         echo "DISCOVER_RESULT: '${{ needs.discover-canary.result }}'"
