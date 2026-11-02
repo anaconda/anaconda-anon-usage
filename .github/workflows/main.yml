@@ -316,9 +316,24 @@ jobs:
         # --allow-dirty: the "Set crate version" step patches Cargo.toml
         # without committing, so cargo sees a dirty working tree.
         cargo publish --allow-dirty
+  # Required status check. It must run (and fail) when an upstream job fails:
+  # GitHub treats a *skipped* required check as passing, so a plain `needs:`
+  # gate lets auto-merge proceed on a red build. always() rather than
+  # !cancelled() so a cancelled run also reports failure instead of skipping.
   tests-pass:
     name: tests-pass
     needs: [rust-test, test]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-    - run: echo "rust-test and test succeeded"
+    - name: Require every upstream job to succeed
+      env:
+        RESULTS: ${{ join(needs.*.result, ' ') }}
+      run: |
+        echo "Upstream job results: $RESULTS"
+        for result in $RESULTS; do
+          if [ "$result" != "success" ]; then
+            echo "::error::An upstream job finished with '$result'"
+            exit 1
+          fi
+        done
