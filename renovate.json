@@ -4,9 +4,14 @@
     "github>anaconda/renovate-config"
   ],
   "platformAutomerge": true,
+  "lockFileMaintenance": {
+    "description": "Automerge lock file maintenance once required checks pass. The matchPackageNames rule below does not cover it because these updates have no packageName.",
+    "automerge": true,
+    "automergeType": "pr"
+  },
   "packageRules": [
     {
-      "description": "Automerge every update Renovate opens once required checks pass.",
+      "description": "Automerge every package update Renovate opens once required checks pass.",
       "matchPackageNames": ["*"],
       "automerge": true,
       "automergeType": "pr",
