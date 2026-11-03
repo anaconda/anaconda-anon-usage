@@ -14,6 +14,11 @@ class AlwaysContains:
     def __contains__(self, item):
         return True
 
+    def __rand__(self, other):
+        if isinstance(other, (set, frozenset)):
+            return other.copy()
+        return NotImplemented
+
 
 @plugins.hookimpl
 def conda_pre_commands():
