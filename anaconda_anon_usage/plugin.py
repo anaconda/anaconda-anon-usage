@@ -10,17 +10,46 @@ def pre_command_patcher(command):
         print("Error loading anaconda-anon-usage:", exc)
 
 
-class AlwaysContains:
-    def __contains__(self, item):
-        return True
-
-
 @plugins.hookimpl
 def conda_pre_commands():
     yield plugins.types.CondaPreCommand(
         name="anaconda-anon-usage",
         action=pre_command_patcher,
-        # This ensures the plugin is run no matter what
-        # conda command is being called
-        run_for=AlwaysContains(),
+        # Hook names follow command handlers, including env_* on older conda.
+        run_for={
+            "activate",
+            "check",
+            "clean",
+            "commands",
+            "compare",
+            "config",
+            "create",
+            "deactivate",
+            "doctor",
+            "env",
+            "env_config",
+            "env_create",
+            "env_export",
+            "env_list",
+            "env_remove",
+            "env_update",
+            "env_vars",
+            "export",
+            "hook",
+            "info",
+            "init",
+            "install",
+            "list",
+            "mock_activate",
+            "mock_deactivate",
+            "notices",
+            "package",
+            "plugins",
+            "reactivate",
+            "remove",
+            "rename",
+            "run",
+            "search",
+            "update",
+        },
     )

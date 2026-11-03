@@ -36,6 +36,9 @@ conda install -n base anaconda-anon-usage
 This package has no additional dependencies other than `conda`
 itself. It employs a [conda pre-command plugin](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/conda-plugins.html) to
 modify the user agent string.
+The hook registers an explicit set of conda command names, including environment
+subcommands and activation hooks supported by older releases. Third-party plugin
+subcommands are not automatically included.
 
 ### Rust crate
 
