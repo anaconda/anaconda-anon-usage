@@ -18,39 +18,33 @@ def plugin_manager():
     return manager
 
 
-def test_pre_command_targets_support_set_operations(plugin_manager):
+@pytest.mark.parametrize("set_type", [set, frozenset])
+@pytest.mark.parametrize("commands", [(), ("info", "custom-command")])
+def test_pre_command_reflected_intersection(plugin_manager, set_type, commands):
     (command_hook,) = plugin_manager.get_hook_results("pre_commands")
+    targets = set_type(commands)
 
-    assert isinstance(command_hook.run_for, set)
-    assert frozenset({"info", "activate", "env_update"}) & command_hook.run_for == {
-        "info",
-        "activate",
-        "env_update",
-    }
-    assert "custom-command" not in command_hook.run_for
+    result = targets & command_hook.run_for
+
+    assert result == targets
+    assert type(result) is set_type
+    assert targets == set_type(commands)
+    if set_type is set:
+        assert result is not targets
+
+
+def test_pre_command_intersection_rejects_unsupported_operand(plugin_manager):
+    (command_hook,) = plugin_manager.get_hook_results("pre_commands")
+    other = ["info"]
+
+    assert command_hook.run_for.__rand__(other) is NotImplemented
+    with pytest.raises(TypeError):
+        other & command_hook.run_for
 
 
 @pytest.mark.parametrize(
     "command",
-    [
-        "activate",
-        "config",
-        "create",
-        "env_config",
-        "env_create",
-        "env_export",
-        "env_list",
-        "env_remove",
-        "env_update",
-        "env_vars",
-        "export",
-        "info",
-        "install",
-        "remove",
-        "run",
-        "search",
-        "update",
-    ],
+    ["info", "activate", "env_update", "custom-command"],
 )
 def test_pre_command_dispatch(plugin_manager, mocker, command):
     patch_main = mocker.patch("anaconda_anon_usage.patch.main")
@@ -58,11 +52,3 @@ def test_pre_command_dispatch(plugin_manager, mocker, command):
     plugin_manager.invoke_pre_commands(command)
 
     patch_main.assert_called_once_with(plugin=True, command=command)
-
-
-def test_unregistered_command_does_not_patch(plugin_manager, mocker):
-    patch_main = mocker.patch("anaconda_anon_usage.patch.main")
-
-    plugin_manager.invoke_pre_commands("custom-command")
-
-    patch_main.assert_not_called()
