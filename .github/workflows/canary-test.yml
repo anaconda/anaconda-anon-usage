@@ -19,6 +19,7 @@ jobs:
       conda-spec: ${{ steps.discover.outputs.conda-spec }}
       python-versions: ${{ steps.discover.outputs.python-versions }}
       anaconda-anon-usage-spec: ${{ steps.discover.outputs.anaconda-anon-usage-spec }}
+      anaconda-anon-usage-ref: ${{ steps.discover.outputs.anaconda-anon-usage-ref }}
     steps:
     - name: Retrieve the source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,6 +36,46 @@ jobs:
     - name: Discover latest canary build
       id: discover
       run: $CONDA/bin/python tests/canary_versions.py >>$GITHUB_OUTPUT
+  # The test job runs against whatever anaconda-anon-usage build is on
+  # ctools/label/dev, which only advances when the post-merge Build upload
+  # succeeds. Flag it here when that build lags main, so a failed upload
+  # shows up as its own failure rather than as test failures.
+  package-freshness:
+    needs: discover-canary
+    if: needs.discover-canary.outputs.anaconda-anon-usage-ref != ''
+    runs-on: ubuntu-latest
+    steps:
+    - name: Retrieve the source code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+    - name: Check the canary package is built from main
+      env:
+        AAU_REF: ${{ needs.discover-canary.outputs.anaconda-anon-usage-ref }}
+        # main.yml takes roughly 30-45 minutes from merge to upload; a canary
+        # run that lands inside this window only warns.
+        GRACE_SECONDS: 7200
+      run: |
+        main=$(git rev-parse origin/main)
+        if ! pkg=$(git rev-parse --verify --quiet "$AAU_REF^{commit}"); then
+          echo "::error::canary anaconda-anon-usage ref '$AAU_REF' is not in this repository"
+          exit 1
+        fi
+        echo "canary package: $AAU_REF ($pkg)"
+        echo "origin/main:    $main"
+        if git merge-base --is-ancestor "$main" "$pkg"; then
+          echo "canary package is current with main"
+          exit 0
+        fi
+        behind=$(git rev-list --count "$pkg..$main")
+        age=$(( $(date +%s) - $(git show -s --format=%ct "$main") ))
+        msg="canary anaconda-anon-usage ($AAU_REF) is $behind commit(s) behind main (${main:0:7})"
+        if [ "$age" -lt "$GRACE_SECONDS" ]; then
+          echo "::warning::$msg; main moved ${age}s ago, upload may still be in progress"
+          exit 0
+        fi
+        echo "::error::$msg; the post-merge Build upload to ctools/label/dev likely failed"
+        exit 1
   test:
     needs: discover-canary
     if: needs.discover-canary.outputs.conda-spec != ''
@@ -61,6 +102,16 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
+    # Run the test suite from the commit the canary package was built from,
+    # so the tests match the installed code even if main has moved ahead.
+    # The package-freshness job reports when that happens.
+    - name: Check out the source matching the canary package
+      env:
+        AAU_REF: ${{ needs.discover-canary.outputs.anaconda-anon-usage-ref }}
+      run: |
+        echo "Workflow HEAD: $(git rev-parse --short HEAD)"
+        echo "Testing anaconda-anon-usage source at: $AAU_REF"
+        git checkout --detach "$AAU_REF"
     - name: Setup Miniconda
       uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
       with:
@@ -121,7 +172,7 @@ jobs:
         python tests/integration/test_heartbeats.py posix
 
   report:
-    needs: [discover-canary, test]
+    needs: [discover-canary, package-freshness, test]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -130,15 +181,19 @@ jobs:
         echo "=== Debug: Job Outputs ==="
         echo "CONDA_SPEC: '${{ needs.discover-canary.outputs.conda-spec }}'"
         echo "AAU_SPEC: '${{ needs.discover-canary.outputs.anaconda-anon-usage-spec }}'"
+        echo "AAU_REF: '${{ needs.discover-canary.outputs.anaconda-anon-usage-ref }}'"
         echo "PYTHON_VERSIONS: '${{ needs.discover-canary.outputs.python-versions }}'"
         echo "TEST_RESULT: '${{ needs.test.result }}'"
+        echo "FRESHNESS_RESULT: '${{ needs.package-freshness.result }}'"
         echo "DISCOVER_RESULT: '${{ needs.discover-canary.result }}'"
         echo "=========================="
 
         CONDA_SPEC="${{ needs.discover-canary.outputs.conda-spec }}"
         AAU_SPEC="${{ needs.discover-canary.outputs.anaconda-anon-usage-spec }}"
+        AAU_REF="${{ needs.discover-canary.outputs.anaconda-anon-usage-ref }}"
         PYTHON_VERSIONS="${{ needs.discover-canary.outputs.python-versions }}"
         TEST_RESULT="${{ needs.test.result }}"
+        FRESHNESS_RESULT="${{ needs.package-freshness.result }}"
 
         echo "## Canary Build Test Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
@@ -151,15 +206,23 @@ jobs:
 
         echo "- **Conda:** $CONDA_SPEC" >> $GITHUB_STEP_SUMMARY
         echo "- **Python Versions Tested:** $PYTHON_VERSIONS" >> $GITHUB_STEP_SUMMARY
-        echo "- **anaconda-anon-usage:** $AAU_SPEC" >> $GITHUB_STEP_SUMMARY
+        echo "- **anaconda-anon-usage:** $AAU_SPEC (source ref: $AAU_REF)" >> $GITHUB_STEP_SUMMARY
         echo "- **Test Result:** $TEST_RESULT" >> $GITHUB_STEP_SUMMARY
+        echo "- **Package Freshness:** $FRESHNESS_RESULT" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
+        status=0
         if [ "$TEST_RESULT" == "skipped" ]; then
           echo "⏭️ Tests were skipped (no builds available)" >> $GITHUB_STEP_SUMMARY
         elif [ "$TEST_RESULT" != "success" ]; then
           echo "⚠️ Tests failed for $CONDA_SPEC" >> $GITHUB_STEP_SUMMARY
-          exit 1
+          status=1
         else
           echo "✅ All tests passed for $CONDA_SPEC" >> $GITHUB_STEP_SUMMARY
         fi
+        if [ "$FRESHNESS_RESULT" != "success" ] && [ "$FRESHNESS_RESULT" != "skipped" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ anaconda-anon-usage on ctools/label/dev ($AAU_REF) is behind main; check the most recent post-merge Build run's upload job" >> $GITHUB_STEP_SUMMARY
+          status=1
+        fi
+        exit $status

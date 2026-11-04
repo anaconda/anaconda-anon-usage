@@ -113,3 +113,14 @@ py_versions = json.dumps(sorted(py_versions, key=normalized_version))
 spec = f"python-versions={py_versions}"
 _p(f"  {spec}")
 print(f"{spec}")
+
+# The source ref the anaconda-anon-usage package was built from. Dev builds
+# carry the commit in their version (e.g. 0.8.1+50.gb69d9a2); releases are
+# bare tags (e.g. 0.8.1). The test job checks out this ref so the test suite
+# matches the installed code, and a separate job flags it if it lags main.
+aau_version = data["anaconda-anon-usage"][0]
+match = re.search(r"\+\d+\.g([0-9a-f]+)", aau_version)
+aau_ref = match.group(1) if match else aau_version.split("+")[0]
+spec = f"anaconda-anon-usage-ref={aau_ref}"
+_p(f"  {spec}")
+print(spec)
